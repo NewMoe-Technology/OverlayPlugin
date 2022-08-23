@@ -36,7 +36,6 @@
             this.lnkGithubRepo = new System.Windows.Forms.LinkLabel();
             this.lblNewUserWelcome = new System.Windows.Forms.Label();
             this.lblReadMe = new System.Windows.Forms.Label();
-            this.btnCactbotUpdate = new System.Windows.Forms.Button();
             this.SuspendLayout();
             // 
             // cbErrorReports
