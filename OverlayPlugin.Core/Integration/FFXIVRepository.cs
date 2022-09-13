@@ -6,6 +6,7 @@ using System.Linq;
 using System.IO;
 using Advanced_Combat_Tracker;
 using FFXIV_ACT_Plugin.Common;
+using System.Collections.Generic;
 
 namespace RainbowMage.OverlayPlugin
 {
@@ -220,6 +221,28 @@ namespace RainbowMage.OverlayPlugin
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        public IDictionary<uint, string> GetResourceDictionary(ResourceType resourceType)
+        {
+            try
+            {
+                return GetResourceDictionaryImpl(resourceType);
+            }
+            catch (FileNotFoundException)
+            {
+                // The FFXIV plugin isn't loaded
+                return null;
+            }
+        }
+
+        public IDictionary<uint, string> GetResourceDictionaryImpl(ResourceType resourceType)
+        {
+            var repo = GetRepository();
+            if (repo == null) return null;
+
+            return repo.GetResourceDictionary(resourceType);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public string GetPlayerName()
         {
             try
@@ -311,13 +334,13 @@ namespace RainbowMage.OverlayPlugin
             if (sub != null)
             {
                 sub.ProcessChanged += new ProcessChangedDelegate(handler);
-                /*
+
                 var repo = GetRepository();
                 if (repo != null)
                 {
                     var process = repo.GetCurrentFFXIVProcess();
                     if (process != null) handler(process);
-                }*/
+                }
             }
         }
     }
