@@ -7,6 +7,7 @@ using System.IO;
 using Advanced_Combat_Tracker;
 using FFXIV_ACT_Plugin.Common;
 using System.Collections.Generic;
+using System.Reflection;
 
 namespace RainbowMage.OverlayPlugin
 {
@@ -46,6 +47,7 @@ namespace RainbowMage.OverlayPlugin
         NetworkEffectResult,
         NetworkStatusList,
         NetworkUpdateHp,
+        ChangeMap,
         Settings = 249,
         Process,
         Debug,
@@ -60,6 +62,8 @@ namespace RainbowMage.OverlayPlugin
         private readonly ILogger logger;
         private IDataRepository repository;
         private IDataSubscription subscription;
+        private MethodInfo logOutputWriteLineFunc;
+        private object logOutput;
 
         public FFXIVRepository(TinyIoCContainer container)
         {
@@ -295,6 +299,60 @@ namespace RainbowMage.OverlayPlugin
                 default:
                     return null;
             }
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        internal bool WriteLogLineImpl(uint ID, string line)
+        {
+            // TODO: re-enable this once https://github.com/anoyetta/ACT.Hojoring/issues/366 is fixed.
+            return false;
+
+            if (logOutputWriteLineFunc == null)
+            {
+                var plugin = GetPluginData();
+                if (plugin == null) return false;
+                var field = plugin.pluginObj.GetType().GetField("_iocContainer", BindingFlags.NonPublic | BindingFlags.Instance);
+                if (field == null)
+                {
+                    logger.Log(LogLevel.Error, "Unable to retrieve _iocContainer field information from FFXIV_ACT_Plugin");
+                    return false;
+                }
+                var iocContainer = field.GetValue(plugin.pluginObj);
+                if (iocContainer == null)
+                {
+                    logger.Log(LogLevel.Error, "Unable to retrieve _iocContainer field value from FFXIV_ACT_Plugin");
+                    return false;
+                }
+                var getServiceMethod = iocContainer.GetType().GetMethod("GetService");
+                if (getServiceMethod == null)
+                {
+                    logger.Log(LogLevel.Error, "Unable to retrieve _iocContainer field value from FFXIV_ACT_Plugin");
+                    return false;
+                }
+                var logfileAssembly = AppDomain.CurrentDomain.GetAssemblies().
+                    SingleOrDefault(assembly => assembly.GetName().Name == "FFXIV_ACT_Plugin.Logfile");
+                if (logfileAssembly == null)
+                {
+                    logger.Log(LogLevel.Error, "Unable to retrieve FFXIV_ACT_Plugin.Logfile assembly");
+                    return false;
+                }
+                logOutput = getServiceMethod.Invoke(iocContainer, new object[] { logfileAssembly.GetType("FFXIV_ACT_Plugin.Logfile.ILogOutput") });
+                if (logOutput == null)
+                {
+                    logger.Log(LogLevel.Error, "Unable to retrieve LogOutput singleton from FFXIV_ACT_Plugin IOC");
+                    return false;
+                }
+                logOutputWriteLineFunc = logOutput.GetType().GetMethod("WriteLine");
+                if (logOutputWriteLineFunc == null)
+                {
+                    logger.Log(LogLevel.Error, "Unable to retrieve LogOutput singleton from FFXIV_ACT_Plugin IOC");
+                    return false;
+                }
+            }
+
+            logOutputWriteLineFunc.Invoke(logOutput, new object[] { (int)ID, DateTime.Now, line });
+
+            return true;
         }
 
         // LogLineDelegate(uint EventType, uint Seconds, string logline);
