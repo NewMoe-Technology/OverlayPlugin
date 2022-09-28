@@ -49,6 +49,7 @@ namespace RainbowMage.OverlayPlugin.NetworkProcessors
             var customLogLines = container.Resolve<FFXIVCustomLogLines>();
             this.logWriter = customLogLines.RegisterCustomLogLine(new LogLineRegistryEntry()
             {
+                Name = "FateDirector",
                 Source = "OverlayPlugin",
                 ID = LogFileLineID,
                 Version = 1,

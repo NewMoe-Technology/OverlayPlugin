@@ -8,24 +8,28 @@
     },
     {
         "ID": 256,
+        "Name":  "RegisterLogLine",
         "Source": "OverlayPlugin",
         "Version": 1,
         "Comment": "Line to be emitted when a new log line is registered"
     },
     {
         "ID": 257,
+        "Name":  "MapEffect",
         "Source": "OverlayPlugin",
         "Version": 1,
         "Comment": "MapEffect data"
     },
     {
         "ID": 258,
+        "Name":  "FateDirector",
         "Source": "OverlayPlugin",
         "Version": 1,
         "Comment": "ActorControlSelf Fate data"
     },
     {
         "ID": 259,
+        "Name":  "CEDirector",
         "Source": "OverlayPlugin",
         "Version": 1,
         "Comment": "Critical Engagement data"

@@ -68,18 +68,17 @@ namespace RainbowMage.OverlayPlugin.EventSources
         [MethodImpl(MethodImplOptions.NoInlining)]
         private void PickMemoryCandidates(FFXIVRepository repository)
         {
+            // For CN/KR, try the lang-specific candidate first, then fall back to intl
+            memoryCandidates = new List<EnmityMemory>();
             if (repository.GetLanguage() == FFXIV_ACT_Plugin.Common.Language.Chinese)
             {
-                memoryCandidates = new List<EnmityMemory>() { new EnmityMemory61(container) };
+                memoryCandidates.Add(new EnmityMemory61(container));
             }
             else if (repository.GetLanguage() == FFXIV_ACT_Plugin.Common.Language.Korean)
             {
-                memoryCandidates = new List<EnmityMemory>() { new EnmityMemory60(container) };
+                memoryCandidates.Add(new EnmityMemory60(container));
             }
-            else
-            {
-                memoryCandidates = new List<EnmityMemory>() { new EnmityMemory62(container) };
-            }
+            memoryCandidates.Add(new EnmityMemory62(container));
         }
 
         public override Control CreateConfigControl()

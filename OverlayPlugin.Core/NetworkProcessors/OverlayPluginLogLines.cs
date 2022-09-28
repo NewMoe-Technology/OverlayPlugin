@@ -21,6 +21,10 @@ namespace RainbowMage.OverlayPlugin.NetworkProcessors
         private Dictionary<string, Dictionary<string, OpcodeConfigEntry>> config = new Dictionary<string, Dictionary<string, OpcodeConfigEntry>>();
         private ILogger logger;
         private FFXIVRepository repository;
+
+        private int exceptionCount = 0;
+        private const int maxExceptionsLogged = 3;
+
         public OverlayPluginLogLineConfig(TinyIoCContainer container)
         {
             logger = container.Resolve<ILogger>();
@@ -38,7 +42,11 @@ namespace RainbowMage.OverlayPlugin.NetworkProcessors
             }
             catch (Exception ex)
             {
-                logger.Log(LogLevel.Error, string.Format(Resources.ErrorCouldNotLoadReservedLogLines, ex));
+                if (exceptionCount < maxExceptionsLogged)
+                {
+                    ++exceptionCount;
+                    logger.Log(LogLevel.Error, string.Format(Resources.ErrorCouldNotLoadReservedLogLines, ex));
+                }
             }
         }
 
@@ -49,18 +57,30 @@ namespace RainbowMage.OverlayPlugin.NetworkProcessors
                 var version = repository.GetGameVersion();
                 if (version == null)
                 {
-                    logger.Log(LogLevel.Error, "Could not detect game version from FFXIV_ACT_Plugin");
+                    if (exceptionCount < maxExceptionsLogged)
+                    {
+                        ++exceptionCount;
+                        logger.Log(LogLevel.Error, "Could not detect game version from FFXIV_ACT_Plugin");
+                    }
                     return null;
                 }
                 if (!config.ContainsKey(version))
                 {
-                    logger.Log(LogLevel.Error, $"No opcodes for game version {version}");
+                    if (exceptionCount < maxExceptionsLogged)
+                    {
+                        ++exceptionCount;
+                        logger.Log(LogLevel.Error, $"No opcodes for game version {version}");
+                    }
                     return null;
                 }
                 var versionOpcodes = config[version];
                 if (!versionOpcodes.ContainsKey(name))
                 {
-                    logger.Log(LogLevel.Error, $"No opcode for game version {version}, opcode name {name}");
+                    if (exceptionCount < maxExceptionsLogged)
+                    {
+                        ++exceptionCount;
+                        logger.Log(LogLevel.Error, $"No opcode for game version {version}, opcode name {name}");
+                    }
                     return null;
                 }
                 return versionOpcodes[name];
