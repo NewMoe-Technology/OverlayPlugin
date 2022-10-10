@@ -1,9 +1,9 @@
 ﻿using System;
+using System.IO;
+using System.Reflection;
 using System.Threading.Tasks;
 using Advanced_Combat_Tracker;
 using RainbowMage.HtmlRenderer;
-using System.IO;
-using System.Reflection;
 using RainbowMage.OverlayPlugin.EventSources;
 
 namespace RainbowMage.OverlayPlugin
@@ -54,7 +54,7 @@ namespace RainbowMage.OverlayPlugin
         {
             ActGlobals.oFormActMain.Invoke((Action)(() =>
             {
-               ActGlobals.oFormActMain.EndCombat(true);
+                ActGlobals.oFormActMain.EndCombat(true);
             }));
         }
 
@@ -88,7 +88,8 @@ namespace RainbowMage.OverlayPlugin
             // Tell the overlay that the page is using the modern API.
             receiver.InitModernAPI();
 
-            Task.Run(() => {
+            Task.Run(() =>
+            {
                 var result = dispatcher.ProcessHandlerMessage(receiver, data);
                 if (callback != null)
                 {

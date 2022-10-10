@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Reflection;
 using System.Runtime.InteropServices;
 
@@ -33,7 +33,7 @@ namespace RainbowMage.OverlayPlugin.NetworkProcessors
 
         public override string ToString()
         {
-            return 
+            return
                 $"{popTime:X8}|" +
                 $"{timeRemaining:X4}|" +
                 $"{unk9:X4}|" +
@@ -56,13 +56,14 @@ namespace RainbowMage.OverlayPlugin.NetworkProcessors
         private IOpcodeConfigEntry opcode = null;
         private readonly int offsetMessageType;
         private readonly int offsetPacketData;
+        private readonly FFXIVRepository ffxiv;
 
-        private Func<string, bool> logWriter;
+        private Func<string, DateTime, bool> logWriter;
 
         public LineCEDirector(TinyIoCContainer container)
         {
             logger = container.Resolve<ILogger>();
-            var ffxiv = container.Resolve<FFXIVRepository>();
+            ffxiv = container.Resolve<FFXIVRepository>();
             var netHelper = container.Resolve<NetworkParser>();
             if (!ffxiv.IsFFXIVPluginPresent())
                 return;
@@ -110,8 +111,9 @@ namespace RainbowMage.OverlayPlugin.NetworkProcessors
             {
                 if (*(ushort*)&buffer[offsetMessageType] == opcode.opcode)
                 {
+                    DateTime serverTime = ffxiv.EpochToDateTime(epoch);
                     CEDirector_v62 CEDirectorPacket = *(CEDirector_v62*)&buffer[offsetPacketData];
-                    logWriter(CEDirectorPacket.ToString());
+                    logWriter(CEDirectorPacket.ToString(), serverTime);
 
                     return;
                 }

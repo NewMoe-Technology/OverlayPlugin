@@ -1,5 +1,4 @@
-﻿using RainbowMage.HtmlRenderer;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -13,8 +12,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using CefSharp;
-using CefSharp.Structs;
 using CefSharp.Enums;
+using CefSharp.Structs;
+using RainbowMage.HtmlRenderer;
 using Point = System.Drawing.Point;
 
 namespace RainbowMage.HtmlRenderer
@@ -44,7 +44,7 @@ namespace RainbowMage.HtmlRenderer
 
         private bool isClickThru;
         public bool IsClickThru
-        { 
+        {
             get
             {
                 return this.isClickThru;
@@ -116,7 +116,8 @@ namespace RainbowMage.HtmlRenderer
             if (accept)
             {
                 ex &= ~WS_EX_NOACTIVATE;
-            } else
+            }
+            else
             {
                 ex |= WS_EX_NOACTIVATE;
             }
@@ -162,7 +163,7 @@ namespace RainbowMage.HtmlRenderer
                     return;
                 }
             }
-            
+
             if (m.Msg == NativeMethods.WM_KEYDOWN ||
                 m.Msg == NativeMethods.WM_KEYUP ||
                 m.Msg == NativeMethods.WM_CHAR ||

@@ -1,17 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Drawing;
 using System.Data;
+using System.Drawing;
+using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using RainbowMage.HtmlRenderer;
 using Advanced_Combat_Tracker;
-using System.Threading;
-using System.Reflection;
-using System.IO;
+using RainbowMage.HtmlRenderer;
 
 namespace RainbowMage.OverlayPlugin
 {
@@ -79,11 +79,13 @@ namespace RainbowMage.OverlayPlugin
                 if (cbErrorReports.Checked)
                 {
                     Renderer.EnableErrorReports(ActGlobals.oFormActMain.AppDataFolder.FullName);
-                } else
+                }
+                else
                 {
                     Renderer.DisableErrorReports(ActGlobals.oFormActMain.AppDataFolder.FullName);
                 }
-            } catch (Exception ex)
+            }
+            catch (Exception ex)
             {
                 logger.Log(LogLevel.Error, $"Failed to switch error reports: {ex}");
                 cbErrorReports.Checked = !cbErrorReports.Checked;
@@ -150,11 +152,13 @@ namespace RainbowMage.OverlayPlugin
                 configType.GetField("LastUpdateCheck").SetValue(cactbotConfig, DateTime.MinValue);
 
                 var checker = checkerType.GetConstructor(new Type[] { loggerType }).Invoke(new object[] { logger });
-                checkerType.GetMethod("DoUpdateCheck", new Type[] {configType}).Invoke(checker, new object[] { cactbotConfig });
-            } catch(FileNotFoundException)
+                checkerType.GetMethod("DoUpdateCheck", new Type[] { configType }).Invoke(checker, new object[] { cactbotConfig });
+            }
+            catch (FileNotFoundException)
             {
                 MessageBox.Show("Could not find Cactbot!", "Error");
-            } catch(Exception ex)
+            }
+            catch (Exception ex)
             {
                 MessageBox.Show("Failed: " + ex.ToString(), "Error");
             }

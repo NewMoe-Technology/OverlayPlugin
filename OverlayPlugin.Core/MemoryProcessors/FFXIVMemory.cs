@@ -1,18 +1,31 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.InteropServices;
 
 namespace RainbowMage.OverlayPlugin.MemoryProcessors
 {
+    public interface IVersionedMemory
+    {
+        Version GetVersion();
+        void ScanPointers();
+        bool IsValid();
+    }
+
     public class FFXIVMemory
     {
-        public event EventHandler OnProcessChange;
+        private event EventHandler<Process> OnProcessChange;
 
         private ILogger logger;
         private Process process;
         private IntPtr processHandle;
         private FFXIVRepository repository;
+
+        // The "international" version always uses the most recent.
+        private static Version globalVersion = new Version(99, 0);
+        private static Version cnVersion = new Version(6, 2);
+        private static Version koVersion = new Version(6, 1);
 
         public FFXIVMemory(TinyIoCContainer container)
         {
@@ -20,6 +33,12 @@ namespace RainbowMage.OverlayPlugin.MemoryProcessors
             repository = container.Resolve<FFXIVRepository>();
 
             repository.RegisterProcessChangedHandler(UpdateProcess);
+        }
+
+        public void RegisterOnProcessChangeHandler(EventHandler<Process> handler)
+        {
+            OnProcessChange += handler;
+            handler.Invoke(this, process);
         }
 
         private void UpdateProcess(Process proc)
@@ -43,10 +62,12 @@ namespace RainbowMage.OverlayPlugin.MemoryProcessors
                 return;
             }
 
-            try {
+            try
+            {
                 process = proc;
                 processHandle = NativeMethods.OpenProcess(ProcessAccessFlags.VirtualMemoryRead, false, proc.Id);
-            } catch (Exception e)
+            }
+            catch (Exception e)
             {
                 logger.Log(LogLevel.Error, "Failed to open FFXIV process: {0}", e);
 
@@ -54,7 +75,7 @@ namespace RainbowMage.OverlayPlugin.MemoryProcessors
                 processHandle = IntPtr.Zero;
             }
 
-            OnProcessChange?.Invoke(this, null);
+            OnProcessChange?.Invoke(this, process);
         }
 
         private void CloseProcessHandle()
@@ -71,7 +92,7 @@ namespace RainbowMage.OverlayPlugin.MemoryProcessors
                 CloseProcessHandle();
                 OnProcessChange?.Invoke(this, null);
             }
-            
+
             if (processHandle != IntPtr.Zero)
                 return true;
 
@@ -344,6 +365,56 @@ namespace RainbowMage.OverlayPlugin.MemoryProcessors
             }
 
             return matches_list;
+        }
+
+        // Returns the best candidate from a list of versioned memory candidates.
+        public static T FindCandidate<T>(List<T> candidates, GameRegion region) where T : IVersionedMemory
+        {
+            // General algorithm, for a given desired version X:
+            // 1) return the first element <= X
+            // 2) return elements after X in ascending order
+            // 3) return elements before X in descending order (just in case)
+            //
+            // e.g. if X = 6.1 with [5.2, 5.3, 6.0, 6.2] return 6.0, 6.2, 5.3, 5.2
+
+            Version target;
+            if (region == GameRegion.Chinese)
+                target = cnVersion;
+            else if (region == GameRegion.Korean)
+                target = koVersion;
+            else
+                target = globalVersion;
+
+            candidates = candidates.OrderBy(x => x.GetVersion()).ToList();
+            int idx = candidates.FindIndex(x => x.GetVersion() > target);
+
+            // If not found, all candidates are <= target version, so walk in descending order.
+            // If found, then idx is the first candidate larger than target, so try to
+            // start on the candidate before it.
+            if (idx == -1)
+                idx = candidates.Count;
+            else
+                idx = Math.Max(idx - 1, 0);
+
+            for (var i = idx; i < candidates.Count; i++)
+            {
+                var candidate = candidates[i];
+                candidate.ScanPointers();
+                if (candidate.IsValid())
+                    return candidate;
+            }
+
+            if (idx == 0)
+                return default(T);
+
+            for (var i = idx - 1; i >= 0; i--)
+            {
+                var candidate = candidates[i];
+                candidate.ScanPointers();
+                if (candidate.IsValid())
+                    return candidate;
+            }
+            return default(T);
         }
     }
 }

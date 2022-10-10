@@ -1,10 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace RainbowMage.OverlayPlugin.MemoryProcessors
+namespace RainbowMage.OverlayPlugin.MemoryProcessors.Combatant
 {
     public enum ObjectType : byte
     {
@@ -172,38 +169,6 @@ namespace RainbowMage.OverlayPlugin.MemoryProcessors
     }
 
     [Serializable]
-    public class EnmityEntry
-    {
-        public uint ID;
-        public uint OwnerID;
-        public string Name;
-        public uint Enmity;
-        public bool isMe;
-        public int HateRate;
-        public byte Job;
-    }
-
-    [Serializable]
-    public class AggroEntry
-    {
-        public uint ID;
-        public string Name;
-        public int HateRate;
-        public int Order;
-        public bool isCurrentTarget;
-        public bool IsTargetable;
-
-        public int CurrentHP;
-        public int MaxHP;
-
-        // Target of Enemy
-        public EnmityEntry Target;
-
-        // Effects
-        public List<EffectEntry> Effects;
-    }
-
-    [Serializable]
     public class EffectEntry
     {
         public ushort BuffID;
@@ -211,41 +176,5 @@ namespace RainbowMage.OverlayPlugin.MemoryProcessors
         public float Timer;
         public uint ActorID;
         public bool isOwner;
-    }
-
-    [Serializable]
-    public class TargetableEnemyEntry
-    {
-        public uint ID;
-        public string Name;
-        public int CurrentHP;
-        public int MaxHP;
-        public bool IsEngaged;
-        public byte EffectiveDistance;
-    }
-
-    [Serializable]
-    public class EnmityHudEntry
-    {
-        public int Order;
-        public uint ID;
-        public uint HPPercent;
-        public uint EnmityPercent;
-        public uint CastPercent;
-    }
-
-    public abstract class EnmityMemory
-    {
-        abstract public bool IsValid();
-        abstract public Combatant GetTargetCombatant();
-        abstract public Combatant GetSelfCombatant();
-        abstract public Combatant GetFocusCombatant();
-        abstract public Combatant GetHoverCombatant();
-        abstract public List<Combatant> GetCombatantList();
-        abstract public List<EnmityEntry> GetEnmityEntryList(List<Combatant> combatantList);
-        abstract public List<EnmityHudEntry> GetEnmityHudEntries();
-        abstract public unsafe List<AggroEntry> GetAggroList(List<Combatant> combatantList);
-        abstract public List<TargetableEnemyEntry> GetTargetableEnemyList(List<Combatant> combatantList);
-        abstract public bool GetInCombat();
     }
 }

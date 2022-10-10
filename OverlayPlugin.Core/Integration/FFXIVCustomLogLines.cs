@@ -1,6 +1,6 @@
-using System;
-using System.IO;
+﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using Newtonsoft.Json;
 
 namespace RainbowMage.OverlayPlugin
@@ -27,7 +27,7 @@ namespace RainbowMage.OverlayPlugin
             {
                 var jsonData = File.ReadAllText(reservedLogLinesPath);
                 var reservedData = JsonConvert.DeserializeObject<List<ConfigReservedLogLine>>(jsonData);
-                logger.Log(LogLevel.Debug, $"Parsing {reservedData.Count} reserved log line entries.");   
+                logger.Log(LogLevel.Debug, $"Parsing {reservedData.Count} reserved log line entries.");
                 foreach (var reservedDataEntry in reservedData)
                 {
                     if (reservedDataEntry.Source == null || reservedDataEntry.Version == null)
@@ -95,15 +95,16 @@ namespace RainbowMage.OverlayPlugin
                     var entry = registry[registeredCustomLogLineID];
                     var Source = entry.Source.Replace("\r", "\\r").Replace("\n", "\\n");
                     var Name = entry.Name.Replace("\r", "\\r").Replace("\n", "\\n");
-                    repository.WriteLogLineImpl(registeredCustomLogLineID, $"{registeredCustomLogLineID}|{Source}|{Name}|{entry.Version}");
+                    repository.WriteLogLineImpl(registeredCustomLogLineID, DateTime.Now, $"{registeredCustomLogLineID}|{Source}|{Name}|{entry.Version}");
                 }
-            } catch(Exception ex)
+            }
+            catch (Exception ex)
             {
                 logger.Log(LogLevel.Error, string.Format(Resources.ErrorCouldNotLoadReservedLogLines, ex));
             }
         }
 
-        public Func<string, bool> RegisterCustomLogLine(ILogLineRegistryEntry entry)
+        public Func<string, DateTime, bool> RegisterCustomLogLine(ILogLineRegistryEntry entry)
         {
             // Don't allow any attempt to write a custom log line with FFXIV_ACT_Plugin as the source.
             // This prevents a downstream plugin from attempting to register e.g. `00` lines by just pretending to be FFXIV_ACT_Plugin.
@@ -126,15 +127,16 @@ namespace RainbowMage.OverlayPlugin
             // Write out that a new log line has been registered. Prevent newlines in the string input for sanity.
             var Source = entry.Source.Replace("\r", "\\r").Replace("\n", "\\n");
             var Name = entry.Name.Replace("\r", "\\r").Replace("\n", "\\n");
-            repository.WriteLogLineImpl(registeredCustomLogLineID, $"{ID}|{Source}|{Name}|{entry.Version}");
+            repository.WriteLogLineImpl(registeredCustomLogLineID, DateTime.Now, $"{ID}|{Source}|{Name}|{entry.Version}");
             registry[ID] = entry;
-            return (line) => {
+            return (line, timestamp) =>
+            {
                 if (line.Contains("\r") || line.Contains("\n"))
                 {
                     logger.Log(LogLevel.Warning, $"Attempted to write custom log line with CR or LF with ID of {ID}");
                     return false;
                 }
-                repository.WriteLogLineImpl(ID, line);
+                repository.WriteLogLineImpl(ID, timestamp, line);
                 return true;
             };
         }

@@ -1,5 +1,4 @@
-﻿using Advanced_Combat_Tracker;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -7,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Advanced_Combat_Tracker;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RainbowMage.HtmlRenderer;
@@ -59,7 +59,8 @@ namespace RainbowMage.OverlayPlugin.Overlays
                 {
                     Overlay.Renderer.EndRender();
                     Overlay.ClearFrame();
-                } else
+                }
+                else
                 {
                     Overlay.Renderer.BeginRender();
                 }
@@ -150,7 +151,8 @@ namespace RainbowMage.OverlayPlugin.Overlays
 
                         ExecuteScript("document.dispatchEvent(new CustomEvent('onExampleShowcase', null));");
                     }, null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
-                } catch (Exception ex)
+                }
+                catch (Exception ex)
                 {
                     logger.Log(LogLevel.Error, $"{Name}: Failed to load preview data: {ex}");
                 }
@@ -230,7 +232,9 @@ namespace RainbowMage.OverlayPlugin.Overlays
                 Subscribe("LogLine");
                 Subscribe("ChangeZone");
                 Subscribe("ChangePrimaryPlayer");
-            } else {
+            }
+            else
+            {
                 if (Preview)
                 {
                     ExecuteScript("if (window.OverlayPluginApi) window.OverlayPluginApi.preview = true;");
@@ -256,14 +260,16 @@ namespace RainbowMage.OverlayPlugin.Overlays
                         if (url.Contains("?"))
                         {
                             url += "&";
-                        } else
+                        }
+                        else
                         {
                             url += "?";
                         }
                     }
                     url += "HOST_PORT=ws://127.0.0.1/fake/";
                 }
-            } else
+            }
+            else
             {
                 int pos = url.IndexOf("HOST_PORT=");
                 if (pos > -1 && url.Contains("/fake/"))
@@ -323,7 +329,7 @@ namespace RainbowMage.OverlayPlugin.Overlays
                         break;
                 }
             }
-            else if(ModernApi)
+            else if (ModernApi)
             {
                 base.HandleEvent(e);
             }
@@ -355,7 +361,7 @@ namespace RainbowMage.OverlayPlugin.Overlays
 
         protected override void Update()
         {
-            
+
         }
     }
 }
