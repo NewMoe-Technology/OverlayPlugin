@@ -48,6 +48,21 @@ namespace RainbowMage.OverlayPlugin
         internal List<IOverlay> Overlays { get; private set; }
         internal event EventHandler OverlaysChanged;
 
+        internal void ClearGameStatusLabel()
+        {
+            if (controlPanel != null && controlPanel.gameStatusLabel != null)
+            {
+                if (controlPanel.InvokeRequired)
+                {
+                    controlPanel.Invoke(new Action(() => controlPanel.gameStatusLabel.Text = ""));
+                }
+                else
+                {
+                    controlPanel.gameStatusLabel.Text = "";
+                }
+            }
+        }
+
         internal string PluginDirectory { get; private set; }
 
         public PluginMain(string pluginDirectory, Logger logger, TinyIoCContainer container)
