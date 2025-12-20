@@ -237,7 +237,8 @@ namespace RainbowMage.OverlayPlugin
                     {
                     }
                 }
-
+                var main = container.Resolve<PluginMain>();
+                main.ClearGameStatusLabel();
                 var _machinaRegion = repository.GetMachinaRegion().ToString();
                 if (_machinaRegion != machinaRegion)
                 {

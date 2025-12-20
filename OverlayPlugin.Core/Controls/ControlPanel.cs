@@ -27,6 +27,7 @@ namespace RainbowMage.OverlayPlugin
         TabPage _generalTab, _eventTab;
         bool logResized = false;
         bool logConnected = false;
+        internal Label gameStatusLabel;
 
         static Dictionary<string, string> esNames = new Dictionary<string, string>
         {
@@ -52,6 +53,16 @@ namespace RainbowMage.OverlayPlugin
             _pluginMain = container.Resolve<PluginMain>();
             _config = container.Resolve<IPluginConfig>();
             _registry = container.Resolve<Registry>();
+
+            // Add game status label
+            this.gameStatusLabel = new Label();
+            this.gameStatusLabel.Text = "请先打开游戏";
+            this.gameStatusLabel.Location = new Point(10, 10);
+            this.gameStatusLabel.AutoSize = true;
+            this.gameStatusLabel.Font = new Font(this.gameStatusLabel.Font, FontStyle.Bold);
+            this.gameStatusLabel.ForeColor = Color.Red;
+            this.splitContainer1.Panel1.Controls.Add(this.gameStatusLabel);
+            this.gameStatusLabel.BringToFront();
 
             this.checkBoxFollowLog.Checked = _config.FollowLatestLog;
 
