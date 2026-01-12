@@ -139,6 +139,44 @@ namespace RainbowMage.OverlayPlugin.EventSources
                     });
                 });
 
+                RegisterEventHandler("getParty", (msg) =>
+                {
+                    var partyMembers = new List<dynamic>();
+
+                    var memory74 = new PartyMemory74(container);
+                    var crossRealmList = memory74.GetCrossRealmParty();
+
+                    foreach (var member in crossRealmList)
+                    {
+                        string worldName = null;
+                        if (member.homeWorld < 0xFFFE)
+                        {
+                            worldName = GetWorldName(member.homeWorld);
+                        }
+
+                        partyMembers.Add(new
+                        {
+                            id = $"{member.objectId:X}",
+                            name = member.name,
+                            worldId = member.homeWorld,
+                            WorldName = worldName, // Provide Name directly
+                            job = member.classJob,
+                            level = member.level,
+                            inParty = true,
+                            contentId = member.contentId,
+                            objectId = member.objectId,
+                            flags = member.flags,
+                            territoryType = member.territoryType,
+                            partyType = "Party"
+                        });
+                    }
+
+                    return JObject.FromObject(new
+                    {
+                        party = partyMembers
+                    });
+                });
+
                 container.Resolve<NetworkParser>().OnOnlineStatusChanged += (o, e) =>
                 {
                     var obj = new JObject();
