@@ -32,54 +32,61 @@ namespace RainbowMage.OverlayPlugin.MemoryProcessors.Party
                     frameworkInstanceAddress = list[0];
                 }
                 var frameworkPtr = memory.ReadIntPtr(frameworkInstanceAddress);
+                // logger.Log(LogLevel.Debug, "Framework Ptr: 0x{0:X}", frameworkPtr.ToInt64());
                 if (frameworkPtr == IntPtr.Zero) return result;
 
                 var uiModulePtr = memory.ReadIntPtr(frameworkPtr + 0x2B68);
                 if (uiModulePtr == IntPtr.Zero) return result;
+                // logger.Log(LogLevel.Debug, "UI Module Ptr: 0x{0:X}", uiModulePtr.ToInt64());
 
                 // InfoModule is embedded in UIModule at 0xFC320
                 var infoModulePtr = uiModulePtr + 0xFC320;
+                // logger.Log(LogLevel.Debug, "Info Module Ptr: 0x{0:X}", infoModulePtr.ToInt64());
 
-                // InfoProxyCrossRealm (Index 20)
-                var infoProxyPtrAddress = infoModulePtr + 0x1978 + (20 * 8);
+                // InfoProxyPartyMember (Index 0) based on user feedback
+                // Note: Index 0 is InfoProxyPartyMember, Index 20 is InfoProxyCrossRealm.
+                // User pointer 0x1D13A4EAD60 matches InfoProxyPartyMember.
+                var infoProxyPtrAddress = infoModulePtr + 0x1978; // Index 0
+                
                 var infoProxy = memory.ReadIntPtr(infoProxyPtrAddress);
+                logger.Log(LogLevel.Debug, "InfoProxyPartyMember Ptr: 0x{0:X}", infoProxy.ToInt64());
 
                 if (infoProxy == IntPtr.Zero) return result;
 
-                // InfoProxyCrossRealm offsets
-                // GroupCount at 0x46E
-                var groupCount = memory.Read8(infoProxy + 0x46E, 1)[0];
+                // InfoProxyCommonList Structure (Inherited by InfoProxyPartyMember)
+                // EntryCount at 0x10 (from InfoProxyInterface relative to InfoProxy)
+                var entryCount = memory.Read32U(infoProxy + 0x10, 1)[0];
+                
+                // CharData array pointer at 0xB0 (from InfoProxyCommonList)
+                var charDataPtr = memory.ReadIntPtr(infoProxy + 0xB0);
 
-                // _crossRealmGroups at 0x480
-                var groupsStartAddr = infoProxy + 0x480;
+                if (charDataPtr == IntPtr.Zero || entryCount == 0 || entryCount > 50) return result;
 
-                for (int i = 0; i < groupCount; i++)
+                for (int i = 0; i < entryCount; i++)
                 {
-                    var groupAddr = groupsStartAddr + (i * 0x348);
+                    var memberAddr = charDataPtr + (i * 0x70); // struct size 0x70
 
-                    // CrossRealmGroup.GroupMemberCount at 0x00
-                    var memberCount = memory.Read8(groupAddr, 1)[0];
+                    // 0x00: ulong ContentId
+                    var contentId = (long)memory.Read64(memberAddr + 0x00, 1)[0];
 
-                    // _groupMembers at 0x08
-                    var membersStartAddr = groupAddr + 0x08;
+                    // 0x32: Name (32 bytes)
+                    var nameBytes = memory.Read8(memberAddr + 0x32, 32);
+                    var name = FFXIVMemory.GetStringFromBytes(nameBytes, 0, 32);
 
-                    for (int j = 0; j < memberCount; j++)
+                    // 0x28: HomeWorld (ushort)
+                    var homeWorld = (ushort)memory.Read16(memberAddr + 0x28, 1)[0];
+
+                    // 0x31: Job (byte)
+                    var job = memory.Read8(memberAddr + 0x31, 1)[0];
+
+                    // InfoProxyCommonList.CharacterData does not have Level or EntityId publicly exposed in obvious offsets
+                    // We will set defaults.
+                    byte level = 0;
+                    uint entityId = 0; 
+                    // Note: 0x20 is ExtraFlags (uint), not EntityId.
+
+                    if (contentId != 0)
                     {
-                        var memberAddr = membersStartAddr + (j * 0x68);
-
-                        // Read fields
-                        var nameBytes = memory.Read8(memberAddr + 0x33, 32);
-                        var name = FFXIVMemory.GetStringFromBytes(nameBytes, 0, 32);
-
-                        var entityId = memory.Read32U(memberAddr + 0x20, 1)[0];
-                        var contentId = (long)memory.Read64(memberAddr + 0x10, 1)[0];
-                        var bytes = memory.Read8(memberAddr + 0x28, 7); // Read chunk from 0x28 to 0x2E
-
-                        var level = bytes[0];
-                        var homeWorld = BitConverter.ToUInt16(bytes, 2);
-                        // var currentWorld = BitConverter.ToUInt16(bytes, 4); // Not in PartyListEntry, ignore or use if needed elsewhere
-                        var job = bytes[6];
-
                         result.Add(new PartyListEntry
                         {
                             objectId = entityId,
@@ -88,7 +95,6 @@ namespace RainbowMage.OverlayPlugin.MemoryProcessors.Party
                             classJob = job,
                             level = level,
                             contentId = contentId,
-                            // Set defaults for missing fields
                             currentHP = 0,
                             maxHP = 0,
                             currentMP = 0,
@@ -96,7 +102,7 @@ namespace RainbowMage.OverlayPlugin.MemoryProcessors.Party
                             x = 0,
                             y = 0,
                             z = 0,
-                            flags = 0, // Unknown flags
+                            flags = 0,
                             territoryType = 0,
                             sex = 0
                         });
