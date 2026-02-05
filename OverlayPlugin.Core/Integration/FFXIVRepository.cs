@@ -69,7 +69,7 @@ namespace RainbowMage.OverlayPlugin
         Global = 1,
         Chinese = 2,
         Korean = 3,
-        Tc = 4
+        TraditionalChinese = 4
     }
 
     public class FFXIVRepository
@@ -392,6 +392,8 @@ namespace RainbowMage.OverlayPlugin
 
                 if (Enum.TryParse<GameRegion>(machina_region, out var region))
                     return region;
+
+                logger.Log(LogLevel.Error, "Unknown Machina region: {0}", machina_region);
             }
             catch (Exception ex)
             {
@@ -435,7 +437,7 @@ namespace RainbowMage.OverlayPlugin
         }
 
         /**
-         * Convert a packet heading to an in-game headiung.
+         * Convert a packet heading to an in-game heading.
          * 
          * When a heading is sent in certain packets, the heading is expressed as a uint16, where
          * 0=north and each increment is 1/65536 of a turn in the CCW direction.
