@@ -1,7 +1,9 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 using Advanced_Combat_Tracker;
 using RainbowMage.HtmlRenderer;
 using RainbowMage.OverlayPlugin.EventSources;
@@ -80,6 +82,41 @@ namespace RainbowMage.OverlayPlugin
         public void setAcceptFocus(bool accept)
         {
             receiver.SetAcceptFocus(accept);
+        }
+
+        public object getScreenInfo()
+        {
+            var overlayRect = receiver.GetOverlayWindowRect();
+            var screens = Screen
+                .AllScreens.Select(s => new
+                {
+                    name = s.DeviceName,
+                    primary = s.Primary,
+                    x = s.Bounds.X,
+                    y = s.Bounds.Y,
+                    width = s.Bounds.Width,
+                    height = s.Bounds.Height,
+                    workingArea = new
+                    {
+                        x = s.WorkingArea.X,
+                        y = s.WorkingArea.Y,
+                        width = s.WorkingArea.Width,
+                        height = s.WorkingArea.Height,
+                    },
+                })
+                .ToArray();
+
+            return new
+            {
+                screens,
+                overlay = new
+                {
+                    x = overlayRect.X,
+                    y = overlayRect.Y,
+                    width = overlayRect.Width,
+                    height = overlayRect.Height,
+                },
+            };
         }
 
         // Also handles (un)subscription to make switching between this and WS easier.

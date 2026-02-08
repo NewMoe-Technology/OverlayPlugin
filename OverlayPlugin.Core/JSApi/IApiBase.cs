@@ -16,5 +16,7 @@ namespace RainbowMage.OverlayPlugin
         void InitModernAPI();
 
         Bitmap Screenshot();
+
+        Rectangle GetOverlayWindowRect();
     }
 }
