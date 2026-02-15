@@ -460,5 +460,14 @@ namespace RainbowMage.OverlayPlugin
         {
             return Overlay.Renderer.Screenshot();
         }
+
+        public virtual Rectangle GetOverlayWindowRect()
+        {
+            if (Overlay == null)
+            {
+                return Rectangle.Empty;
+            }
+            return new Rectangle(Overlay.Location, Overlay.Size);
+        }
     }
 }
