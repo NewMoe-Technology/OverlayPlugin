@@ -4,15 +4,15 @@
     <Message Text="Running post-build move for OverlayPlugin" Importance="High" />
     <Exec Command="echo === Copying $(TargetPath) → $(ACT_DIEMOE_PATH)\Plugins\ACT.OverlayPlugin\ACT.OverlayPlugin.dll" />
     <Copy SourceFiles="$(TargetPath)" DestinationFiles="$(ACT_DIEMOE_PATH)\Plugins\ACT.OverlayPlugin\ACT.OverlayPlugin.dll" SkipUnchangedFiles="true" />
-
-    <!-- libs 下的几个 dll -->
-    <ItemGroup>
-        <_LibsToCopy Include="$(TargetDir)\libs\OverlayPlugin.Common.dll;
-                        $(TargetDir)\libs\OverlayPlugin.Core.dll;
-                        $(TargetDir)\libs\OverlayPlugin.Updater.dll;
-                        $(TargetDir)\libs\HtmlRenderer.dll"/>
-    </ItemGroup>
-    <Exec Command="echo === Copying $(TargetDir)\libs → $(ACT_DIEMOE_PATH)" />
-    <Copy SourceFiles="@(_LibsToCopy)" DestinationFolder="$(ACT_DIEMOE_PATH)\Plugins\ACT.OverlayPlugin\libs" SkipUnchangedFiles="true"/>
+    <Exec Command="echo === Copying $(NOP_RENDERER_PROJECT_PATH)\dist\NOPOverlay.exe → $(ACT_DIEMOE_PATH)\Plugins\ACT.OverlayPlugin" />
+    <Copy SourceFiles="$(NOP_RENDERER_PROJECT_PATH)\dist\NOPOverlay.exe" DestinationFolder="$(ACT_DIEMOE_PATH)\Plugins\ACT.OverlayPlugin" SkipUnchangedFiles="true" />
+    <Exec Command="echo === Copying $(TargetDir)\libs\OverlayPlugin.Common.dll → $(ACT_DIEMOE_PATH)\Plugins\ACT.OverlayPlugin\libs" />
+    <Copy SourceFiles="$(TargetDir)\libs\OverlayPlugin.Common.dll" DestinationFolder="$(ACT_DIEMOE_PATH)\Plugins\ACT.OverlayPlugin\libs" SkipUnchangedFiles="true"/>
+    <Exec Command="echo === Copying $(TargetDir)\libs\OverlayPlugin.Core.dll → $(ACT_DIEMOE_PATH)\Plugins\ACT.OverlayPlugin\libs" />
+    <Copy SourceFiles="$(TargetDir)\libs\OverlayPlugin.Core.dll" DestinationFolder="$(ACT_DIEMOE_PATH)\Plugins\ACT.OverlayPlugin\libs" SkipUnchangedFiles="true"/>
+    <Exec Command="echo === Copying $(TargetDir)\libs\OverlayPlugin.Updater.dll → $(ACT_DIEMOE_PATH)\Plugins\ACT.OverlayPlugin\libs" />
+    <Copy SourceFiles="$(TargetDir)\libs\OverlayPlugin.Updater.dll" DestinationFolder="$(ACT_DIEMOE_PATH)\Plugins\ACT.OverlayPlugin\libs" SkipUnchangedFiles="true"/>
+    <Exec Command="echo === Copying $(TargetDir)\libs\HtmlRenderer.dll → $(ACT_DIEMOE_PATH)\Plugins\ACT.OverlayPlugin\libs" />
+    <Copy SourceFiles="$(TargetDir)\libs\HtmlRenderer.dll" DestinationFolder="$(ACT_DIEMOE_PATH)\Plugins\ACT.OverlayPlugin\libs" SkipUnchangedFiles="true"/>
   </Target>
 </Project>
