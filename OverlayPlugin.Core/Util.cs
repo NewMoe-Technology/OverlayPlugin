@@ -10,7 +10,7 @@ using System.Windows.Forms;
 
 namespace RainbowMage.OverlayPlugin
 {
-    internal static class Util
+    internal static partial class Util
     {
         /// <summary>
         /// JSON 用に文字列をエスケープします。
