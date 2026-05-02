@@ -1,0 +1,18 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- Runs only for the project with filename OverlayPlugin.Core.csproj -->
+  <Target Name="Move_OverlayPlugin_to_ACT" AfterTargets="PostBuildEvent" Condition="'$(MSBuildProjectName)' == 'OverlayPlugin'">
+    <Message Text="Running post-build move for OverlayPlugin" Importance="High" />
+    <Exec Command="echo === Copying $(TargetPath) → $(ACT_DIEMOE_PATH)\Plugins\ACT.OverlayPlugin\ACT.OverlayPlugin.dll" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFiles="$(ACT_DIEMOE_PATH)\Plugins\ACT.OverlayPlugin\ACT.OverlayPlugin.dll" SkipUnchangedFiles="true" />
+
+    <!-- libs 下的几个 dll -->
+    <ItemGroup>
+        <_LibsToCopy Include="$(TargetDir)\libs\OverlayPlugin.Common.dll;
+                        $(TargetDir)\libs\OverlayPlugin.Core.dll;
+                        $(TargetDir)\libs\OverlayPlugin.Updater.dll;
+                        $(TargetDir)\libs\HtmlRenderer.dll"/>
+    </ItemGroup>
+    <Exec Command="echo === Copying $(TargetDir)\libs → $(ACT_DIEMOE_PATH)" />
+    <Copy SourceFiles="@(_LibsToCopy)" DestinationFolder="$(ACT_DIEMOE_PATH)\Plugins\ACT.OverlayPlugin\libs" SkipUnchangedFiles="true"/>
+  </Target>
+</Project>

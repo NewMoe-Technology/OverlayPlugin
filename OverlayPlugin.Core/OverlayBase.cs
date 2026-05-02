@@ -10,6 +10,7 @@ using System.Windows.Forms;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RainbowMage.HtmlRenderer;
+using OverlayForm = RainbowMage.OverlayPlugin.DieMoe.NOPOverlayForOP;
 
 namespace RainbowMage.OverlayPlugin
 {
