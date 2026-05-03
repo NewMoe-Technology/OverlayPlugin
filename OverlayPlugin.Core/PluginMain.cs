@@ -334,6 +334,7 @@ namespace RainbowMage.OverlayPlugin
 
                                     // WSServer has to start after the LoadAddons() call because clients can connect immediately
                                     // after it's initialized and that requires the event sources to be initialized.
+                                    Config.WSServerRunning = true; // 默认启动，NOP需要用。TODO: 以后可能要单独开一个避免互相干扰
                                     if (Config.WSServerRunning)
                                     {
                                         this.label.Text = "Init Phase 2: WSServer";
