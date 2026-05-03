@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Windows.Forms;
 using RainbowMage.HtmlRenderer;
 
@@ -19,63 +20,89 @@ namespace RainbowMage.OverlayPlugin.DieMoe
             this.id = id; // 设置窗口ID，NOP -i 参数
             this.url = url; // 设置窗口加载的URL，NOP -s 参数
             this.overlayApi = overlayApi; // 原版里的处理API操作的部分，需要想办法让NOP悬浮窗也能调用这个实例里的函数，暂定思路是通过WebSocket服务器和JSON RPC来桥接
+
+            Renderer = new NOPRenderer(this.id, this.name, this.url);
         }
 
-        public NOPRenderer Renderer { get; internal set; } = new NOPRenderer();
+        public NOPRenderer Renderer { get; internal set; }
 
-        public bool Visible { get; internal set; } // TODO: set时需要给渲染进程发消息
-        public bool IsClickThru { get; internal set; } // TODO: set时需要给渲染进程发消息
-        public bool Locked { get; internal set; } // TODO: set时需要给渲染进程发消息
-        public string Url { get; internal set; } // TODO: set时需要给渲染进程发消息
+        bool isVisible;
+        bool isClickThru;
+        bool isLocked;
+        FormStartPosition startPosition;
+        Point location;
+        Size size;
+
+        public bool Visible { get => isVisible; internal set { Log.D($"set_Visible({value})"); isVisible = value; } } // TODO: set时需要给渲染进程发消息
+        public bool IsClickThru { get => isClickThru; internal set { Log.D($"set_IsClickThru({value})"); isClickThru = value; } } // TODO: set时需要给渲染进程发消息
+        public bool Locked { get => isLocked; internal set { Log.D($"set_Locked({value})"); isLocked = value; } } // TODO: set时需要给渲染进程发消息
+        public string Url { get => url; internal set { Log.D($"set_Url({value})"); url = value; } } // TODO: set时需要给渲染进程发消息
+
+        public FormStartPosition StartPosition { get => startPosition; internal set { Log.D($"set_StartPosition({value})"); startPosition = value; } } // .NET FormStartPosition 枚举，原版 OverlayBase.cs:136 用来让系统选初始位置。NOP 不需要——Aardio 自己管定位，或以后再实现，例如传参什么的。
+        public Point Location { get => location; internal set { Log.D($"set_Location({value})"); location = value; } } // 这个与Size合在一起才是完整的窗口Rectangle，TODO: set时需要给渲染进程发消息（应该是设置窗口位置）
+        public Size Size { get => size; internal set { Log.D($"set_Size({value})"); size = value; } } // 这个与Location合在一起才是完整的窗口Rectangle，TODO: set时需要给渲染进程发消息（应该是设置窗口大小）
+        public string Text { get => name; internal set => name = value; } // Form的Text属性，原版里用来设置窗口标题的，NOP的话应该也是设置窗口标题。目前不打算做太多功能，传参够用了。
+        public int MaxFrameRate { get; internal set; } // 无动作，单纯为了兼容而存在
 
         // 我感觉EnsureOverlaysAreOverGame坏掉了，得验证一下，如果坏掉了那就不用支持了，干脆把那段代码注释掉。
         // 也有可能是我理解错了，可能那段代码在检查位于FFXIV游戏窗口后面的窗口。
-        public IntPtr Handle { get; internal set; } // TODO: get时需要从渲染进程获取，只能set一次。会被EnsureOverlaysAreOverGame用于强制悬浮窗置顶，所以需要支持这个功能。
-        public FormStartPosition StartPosition { get; internal set; } // .NET FormStartPosition 枚举，原版 OverlayBase.cs:136 用来让系统选初始位置。NOP 不需要——Aardio 自己管定位，或以后再实现，例如传参什么的。
-        public Point Location { get; internal set; } // 这个与Size合在一起才是完整的窗口Rectangle，TODO: set时需要给渲染进程发消息（应该是设置窗口位置）
-        public Size Size { get; internal set; } // 这个与Location合在一起才是完整的窗口Rectangle，TODO: set时需要给渲染进程发消息（应该是设置窗口大小）
-        public string Text { get; internal set; } // TODO: set时需要给渲染进程发消息（应该是设置标题），或者只传参也可以？到时候看看
-        public int MaxFrameRate { get; internal set; } // 无动作
+        // TODO: get时需要从渲染进程获取，只能set一次。会被EnsureOverlaysAreOverGame用于强制悬浮窗置顶，所以需要支持这个功能。
+        public IntPtr Handle => Renderer.Handle;
 
         internal void ClearFrame()
         {
             // 应该不需要实现，这个是原来用Form显示时用来清除窗口内容的。
-            Debug.WriteLine($"!!! NOPOverlayForOP.ClearFrame() called from:\n{new StackTrace(true)}");
-            throw new NotImplementedException();
+            Log.D($"!!! NOPOverlayForOP.ClearFrame() called from:\n{new StackTrace(true)}");
         }
 
         internal void Close()
         {
             // TODO: 需要给渲染进程发消息关闭窗口
             // 调用时是和Close一起的，不过可以考虑把关闭进程的逻辑放在这里，destructor里也调用一次以防万一。
-            Debug.WriteLine($"!!! NOPOverlayForOP.Close() called from:\n{new StackTrace(true)}");
-            throw new NotImplementedException();
+            Log.D($"!!! NOPOverlayForOP.Close() called from:\n{new StackTrace(true)}");
+            Renderer.EndRender();
         }
 
         internal void Dispose()
         {
             // 释放资源，应该没什么资源需要释放吧？调用时是和Close一起的，应该算多余的，因为原版的OverlayForm真的是一个控件。
-            Debug.WriteLine($"!!! NOPOverlayForOP.Dispose() called from:\n{new StackTrace(true)}");
-            throw new NotImplementedException();
+            Log.D($"!!! NOPOverlayForOP.Dispose() called from:\n{new StackTrace(true)}");
         }
 
         internal void Reload()
         {
             // TODO: 需要给渲染进程发消息重新加载页面
-            Debug.WriteLine($"!!! NOPOverlayForOP.Reload() called from:\n{new StackTrace(true)}");
+            Log.D($"!!! NOPOverlayForOP.Reload() called from:\n{new StackTrace(true)}");
             throw new NotImplementedException();
         }
 
         internal void SetAcceptFocus(bool accept)
         {
+            if (Handle == IntPtr.Zero)
+            {
+                Log.D($"!!! NOPOverlayForOP.SetAcceptFocus(accept={accept}) called but Handle is not ready yet, called from:\n{new StackTrace(true)}");
+                return;
+            }
+
             // TODO: 需要给渲染进程发消息设置是否接受焦点
-            Debug.WriteLine($"!!! NOPOverlayForOP.SetAcceptFocus(accept={accept}) called from:\n{new StackTrace(true)}");
-            throw new NotImplementedException();
+            // 先试试直接修改窗口样式，看看能不能实现不接受焦点的效果。
+            const int WS_EX_NOACTIVATE = 0x08000000;
+            Log.D($"!!! NOPOverlayForOP.SetAcceptFocus(accept={accept}) called from:\n{new StackTrace(true)}");
+            int ex = NativeMethods.GetWindowLong(Handle, NativeMethods.GWL_EXSTYLE);
+            if (accept)
+            {
+                ex &= ~WS_EX_NOACTIVATE;
+            }
+            else
+            {
+                ex |= WS_EX_NOACTIVATE;
+            }
+            NativeMethods.SetWindowLongA(Handle, NativeMethods.GWL_EXSTYLE, (IntPtr)ex);
         }
 
         internal void Show()
         {
-            Debug.WriteLine("!!! NOPOverlayForOP.Show");
+            Log.D("!!! NOPOverlayForOP.Show");
             Visible = true;
         }
 
@@ -96,52 +123,104 @@ namespace RainbowMage.OverlayPlugin.DieMoe
             // BrowserStartLoading 应该在 Aardio 导航时触发。
             // BrowserLoad 在 WebView2 加载完成时触发。
 
+            Process _process;
+            string Id { get; }
+            string Name { get; }
+            string Url { get; }
+
+            public NOPRenderer(string id, string name, string url)
+            {
+                Id = id;
+                Name = name;
+                Url = url;
+            }
 
             internal void BeginRender()
             {
                 // TODO: 启动渲染进程
-                Debug.WriteLine("!!! NOPRenderer.BeginRender() 启动渲染进程");
+                Log.D("!!! NOPRenderer.BeginRender() 启动渲染进程");
+
+                // 拼命令行
+                Directory.CreateDirectory(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "NOP", "Renderer")); // 确保目录存在
+                var overlayConfigPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "NOP", "Renderer", $"{Id}.oss");
+                var args = (Url.StartsWith("file:///") ? $"-d \"{Url.Substring(8)}\"" : $"-s \"{Url}\"") +
+                    $" -n \"{Name}\"" +
+                    $" -p {Process.GetCurrentProcess().Id}" +
+                    $" -c \"{overlayConfigPath}\"" +
+                    $" --devtools --esc --show-task-icon";
+                // -i/-h 先不加（没有 WebSocket Server 时用不了）
+                // 以后：$"-i \"{id}\" -h \"{host}\""
+
+                _process = Process.Start(new ProcessStartInfo
+                {
+                    FileName = Path.Combine("Plugins", "ACT.OverlayPlugin", "NOPOverlay.exe"),
+                    Arguments = args,
+                    UseShellExecute = false,
+                    WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory,
+                });
+
+                // 获取窗口句柄（等 MainWindowHandle 就绪）
+                _process.WaitForInputIdle();
+                Handle = _process.MainWindowHandle;
+
+                // 监听进程退出
+                _process.EnableRaisingEvents = true;
+                _process.Exited += OnProcessExited;
             }
+
+            private void OnProcessExited(object sender, EventArgs e)
+            {
+                Log.D("!!! NOPRenderer.OnProcessExited() 渲染进程已退出");
+                Handle = IntPtr.Zero;
+                _process?.Dispose();
+                _process = null;
+            }
+
+            public IntPtr Handle { get; private set; }
 
             internal void EndRender()
             {
                 // TODO: 停止渲染进程
-                Debug.WriteLine($"!!! NOPRenderer.EndRender() 停止渲染进程, called from:\n{new StackTrace(true)}");
-                throw new NotImplementedException();
+                Log.D($"!!! NOPRenderer.EndRender() 停止渲染进程, called from:\n{new StackTrace(true)}");
+
+                if (_process?.HasExited != true)
+                {
+                    _process?.Kill();
+                }
             }
 
             internal void ExecuteScript(string script)
             {
                 // TODO: 需要给渲染进程发消息执行脚本
-                Debug.WriteLine($"!!! NOPRenderer.ExecuteScript(script={script.Substring(0, Math.Min(script?.Length ?? 0, 100))}...) called from:\n{new StackTrace(true)}");
+                Log.D($"!!! NOPRenderer.ExecuteScript(script={script.Substring(0, Math.Min(script?.Length ?? 0, 100))}...) called from:\n{new StackTrace(true)}");
                 throw new NotImplementedException();
             }
 
             internal Bitmap Screenshot()
             {
                 // 不需要实现，很老的悬浮窗才会用，不打算支持。
-                Debug.WriteLine($"!!! NOPRenderer.Screenshot() called from:\n{new StackTrace(true)}");
+                Log.D($"!!! NOPRenderer.Screenshot() called from:\n{new StackTrace(true)}");
                 throw new NotImplementedException();
             }
 
             internal void SetMuted(bool v)
             {
                 // TODO: 需要给渲染进程发消息设置静音
-                Debug.WriteLine($"!!! NOPRenderer.SetMuted(v={v}) called from:\n{new StackTrace(true)}");
+                Log.D($"!!! NOPRenderer.SetMuted(v={v}) called from:\n{new StackTrace(true)}");
                 throw new NotImplementedException();
             }
 
             internal void SetZoomLevel(double v)
             {
                 // 不需要实现，以后可以考虑
-                Debug.WriteLine($"!!! NOPRenderer.SetZoomLevel(v={v}) called from:\n{new StackTrace(true)}");
+                Log.D($"!!! NOPRenderer.SetZoomLevel(v={v}) called from:\n{new StackTrace(true)}");
                 throw new NotImplementedException();
             }
 
             internal void showDevTools(bool open = true)
             {
                 // 不需要实现，虽然很想要但似乎有点难度，以后再看看。
-                Debug.WriteLine($"!!! NOPRenderer.showDevTools(open={open}) called from:\n{new StackTrace(true)}");
+                Log.D($"!!! NOPRenderer.showDevTools(open={open}) called from:\n{new StackTrace(true)}");
                 throw new NotImplementedException();
             }
         }
