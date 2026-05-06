@@ -2,6 +2,7 @@
 using Fleck;
 using Newtonsoft.Json.Linq;
 using NoOverlayPlugin.JsonRpc;
+using RainbowMage.OverlayPlugin.DieMoe;
 
 namespace RainbowMage.OverlayPlugin
 {
@@ -14,7 +15,7 @@ namespace RainbowMage.OverlayPlugin
             private EventDispatcher _dispatcher;
             private IWebSocketConnection _conn;
             private string _overlayId;
-            private JsonRpcProcessor _rpc;
+            //private JsonRpcProcessor _rpc;
 
             public NOPConnectionHandler(string overlayId, ILogger logger, EventDispatcher dispatcher, IWebSocketConnection conn, WSServer server)
             {
@@ -24,7 +25,7 @@ namespace RainbowMage.OverlayPlugin
                 _conn = conn;
 
                 _logger.Log(LogLevel.Info, $"Overlay {_overlayId}: connected");
-                OverlayPlugin.Log.D($"Overlay {_overlayId}: connected");
+                DieMoe.Log.D($"Overlay {_overlayId}: connected");
 
                 var open = true;
                 _conn.OnMessage = OnMessage;
@@ -50,12 +51,6 @@ namespace RainbowMage.OverlayPlugin
 
                     _logger.Log(LogLevel.Info, $"WebSocket connection was closed with error: {ex}");
                 };
-
-                _rpc = new JsonRpcProcessor();
-                _rpc.AddMethod("callHandler", new Func<string, JToken>(data =>
-                {
-                    return _dispatcher.ProcessHandlerMessage(this, data);
-                }));
             }
 
             public void Close() => _conn.Close();
@@ -70,22 +65,23 @@ namespace RainbowMage.OverlayPlugin
                 }
 
                 var notification = new JsonRpcRequest("__OverlayCallback", new[] { (JToken)e });
-                OverlayPlugin.Log.D($"Overlay {_overlayId}: Sending event: {notification.Serialize()}");
+                DieMoe.Log.D($"Overlay {_overlayId}: Sending event: {notification.Serialize()}");
                 _conn.Send(notification.Serialize());
             }
 
             public void OnMessage(string message)
             {
-                OverlayPlugin.Log.D($"Overlay {_overlayId}: Received message: {message}");
+                DieMoe.Log.D($"Overlay {_overlayId}: Received message: {message}");
 
                 try
                 {
-                    var response = _rpc.Process(message);
+                    var response = NOPOverlayForOP.JsonRpcProcessor.Process(message);
+                    DieMoe.Log.D($"Overlay {_overlayId}: Responding: {response.Serialize()}");
                     _conn.Send(response.Serialize());
                 }
                 catch (Exception ex)
                 {
-                    OverlayPlugin.Log.W($"Overlay {_overlayId}: Failed to process JSON RPC message: {message}", ex);
+                    DieMoe.Log.W($"Overlay {_overlayId}: Failed to process JSON RPC message: {message}", ex);
                     _logger.Log(LogLevel.Warning, $"JSON RPC error: {ex.Message}");
                 }
             }

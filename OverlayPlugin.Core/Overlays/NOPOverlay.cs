@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using NoOverlayPlugin.JsonRpc;
 using RainbowMage.HtmlRenderer;
@@ -19,12 +20,37 @@ namespace RainbowMage.OverlayPlugin.DieMoe
 
         public NOPOverlayForOP(string name, string id, string url, int maxFrameRate, object overlayApi)
         {
-            this.name = name; // 设置窗口标题，NOP -n 参数
-            this.id = id; // 设置窗口ID，NOP -i 参数
+            this.name = name; // 设置窗口标题，NOP -n 参数，以及提供NOP -i 参数，因为OverlayPlugin的id是加载时生成的，不可靠。
+            this.id = id; // 虽然id仅在本次加载中一致，但可用于将悬浮窗实例与WS连接关联。
             this.url = url; // 设置窗口加载的URL，NOP -s 参数
             this.overlayApi = (OverlayApi)overlayApi; // 原版里的处理API操作的部分，需要想办法让NOP悬浮窗也能调用这个实例里的函数，暂定思路是通过WebSocket服务器和JSON RPC来桥接
 
-            Renderer = new NOPRenderer(this, this.id, this.name, this.url);
+            Renderer = new NOPRenderer(this, this.name, this.name, this.url);
+
+            JsonRpcProcessor.AddMethod($"{this.name}:OverlayApi.callHandler", new Func<string, string>(data =>
+            {
+                Log.D($"{this}.JsonRpcProcessor received call to OverlayApi.callHandler with data: {data}");
+                try
+                {
+                    var json = this.overlayApi.callHandler(data, null).GetAwaiter().GetResult();
+                    return json;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"悬浮窗调用OverlayApi.callHandler时意外出错: {ex}");
+                    return "null";
+                }
+            }));
+            JsonRpcProcessor.AddMethod($"{this.name}:Renderer.FireOnceBrowserStartLoading", new Func<string, string>(data =>
+            {
+                Renderer.FireOnceBrowserStartLoading(data);
+                return "null";
+            }));
+            JsonRpcProcessor.AddMethod($"{this.name}:Renderer.FireOnceBrowserLoad", new Func<string, string>(data =>
+            {
+                Renderer.FireOnceBrowserLoad(data);
+                return "null";
+            }));
         }
 
         public NOPRenderer Renderer { get; internal set; }
@@ -160,6 +186,7 @@ namespace RainbowMage.OverlayPlugin.DieMoe
                 // -i/-h 先不加（没有 WebSocket Server 时用不了）
                 // 以后：$"-i \"{id}\" -h \"{host}\""
 
+                Log.D($"{Overlay}.NOPRenderer.BeginRender() 启动渲染进程 {args}");
                 _process = Process.Start(new ProcessStartInfo
                 {
                     FileName = Path.Combine("Plugins", "ACT.OverlayPlugin", "NOPOverlay.exe"),
@@ -202,6 +229,7 @@ namespace RainbowMage.OverlayPlugin.DieMoe
             {
                 // TODO: 需要给渲染进程发消息执行脚本
                 Log.D($"{Overlay}.NOPRenderer.执行JS(script={script.Substring(0, Math.Min(script?.Length ?? 0, 100))}...) called from:\n{new StackTrace(true)}");
+                //Overlay.Connection.ExecuteScript();
             }
 
             internal Bitmap Screenshot()
@@ -227,6 +255,30 @@ namespace RainbowMage.OverlayPlugin.DieMoe
             {
                 // 不需要实现，以后再看看，Aardio的WebView2封装刚好有一个showDevtoolsWindow函数可以用。
                 Log.D($"{Overlay}.NOPRenderer.showDevTools(open={open}) called from:\n{new StackTrace(true)}");
+            }
+
+            bool firedBrowserStartLoading = false;
+            bool firedBrowserLoad = false;
+            internal void FireOnceBrowserStartLoading(string data)
+            {
+                if (firedBrowserStartLoading)
+                {
+                    Log.D($"{Overlay}.NOPRenderer.FireOnceBrowserStartLoading(data={data}) called but already fired once");
+                    return;
+                }
+                Log.D($"{Overlay}.NOPRenderer.FireOnceBrowserStartLoading(data={data}) firing BrowserStartLoading event");
+                BrowserStartLoading?.Invoke(this, new BrowserLoadEventArgs(0, Url));
+            }
+
+            internal void FireOnceBrowserLoad(string data)
+            {
+                if (firedBrowserLoad)
+                {
+                    Log.D($"{Overlay}.NOPRenderer.FireOnceBrowserLoad(data={data}) called but already fired once");
+                    return;
+                }
+                Log.D($"{Overlay}.NOPRenderer.FireOnceBrowserLoad(data={data}) firing BrowserLoad event");
+                BrowserLoad?.Invoke(this, new BrowserLoadEventArgs(200, Url));
             }
         }
     }

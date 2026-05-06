@@ -83,18 +83,19 @@ namespace RainbowMage.OverlayPlugin
         }
 
         // Also handles (un)subscription to make switching between this and WS easier.
-        public void callHandler(string data, object callback)
+        public Task<string> callHandler(string data, object callback)
         {
             // Tell the overlay that the page is using the modern API.
             receiver.InitModernAPI();
 
-            Task.Run(() =>
+            return Task.Run(() =>
             {
                 var result = dispatcher.ProcessHandlerMessage(receiver, data);
                 if (callback != null)
                 {
                     Renderer.ExecuteCallback(callback, result?.ToString(Newtonsoft.Json.Formatting.None));
                 }
+                return result?.ToString(Newtonsoft.Json.Formatting.None);
             });
         }
     }

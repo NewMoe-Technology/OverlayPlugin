@@ -1,10 +1,54 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows.Forms;
+using CefSharp;
+using CefSharp.Internals;
 
-namespace RainbowMage.OverlayPlugin
+namespace RainbowMage.OverlayPlugin.DieMoe
 {
+    public partial class NOPOverlayForOP
+    {
+        class CallbackAdapter : IJavascriptCallback
+        {
+            Func<object[], object> callback;
+
+            public CallbackAdapter(Func<object[], object> callback)
+            {
+                this.callback = callback;
+            }
+
+            public long Id => throw new NotImplementedException();
+
+            public bool CanExecute => true;
+
+            public bool IsDisposed { get; private set; }
+
+            public void Dispose() => IsDisposed = true; // Nothing to dispose.
+
+            public Task<JavascriptResponse> ExecuteAsync(params object[] parms)
+            {
+
+                var response = new JavascriptResponse();
+                try
+                {
+                    var result = callback(parms);
+                    response.Success = true;
+                    response.Result = result;
+                }
+                catch (Exception ex)
+                {
+                    response.Success = false;
+                    response.Message = $"Callback execution failed: {ex}";
+                }
+                return Task.FromResult(response);
+            }
+
+            public Task<JavascriptResponse> ExecuteWithTimeoutAsync(TimeSpan? timeout, params object[] parms) => ExecuteAsync(parms);
+        }
+    }
+
     internal static class Log
     {
         static TextWriter Writer;
