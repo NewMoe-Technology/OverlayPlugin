@@ -15,7 +15,7 @@ using RainbowMage.OverlayPlugin.Overlays;
 
 namespace RainbowMage.OverlayPlugin
 {
-    public class WSServer : IDisposable
+    public partial class WSServer : IDisposable
     {
         TinyIoCContainer _container;
         ILogger _logger;
@@ -144,6 +144,12 @@ namespace RainbowMage.OverlayPlugin
                 _server.Start((conn) =>
                 {
                     Log(LogLevel.Debug, $"Got request on WSServer at {conn.ConnectionInfo.Path}");
+
+                    if (NOPConnectionHandler.TryHandle(_container, conn, this, out var handler))
+                    {
+                        _connections.Add(handler);
+                        return;
+                    }
 
                     switch (conn.ConnectionInfo.Path)
                     {

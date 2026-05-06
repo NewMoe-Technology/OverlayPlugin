@@ -14,7 +14,7 @@ namespace RainbowMage.OverlayPlugin
         public static event EventHandler<SendMessageEventArgs> SendMessage;
         public static event EventHandler<SendMessageEventArgs> OverlayMessage;
 
-        private readonly EventDispatcher dispatcher;
+        internal readonly EventDispatcher dispatcher;
         private readonly IApiBase receiver;
         private readonly ILogger logger;
 

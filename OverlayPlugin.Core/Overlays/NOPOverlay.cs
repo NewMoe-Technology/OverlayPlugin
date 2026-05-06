@@ -3,23 +3,26 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
+using NoOverlayPlugin.JsonRpc;
 using RainbowMage.HtmlRenderer;
 
 namespace RainbowMage.OverlayPlugin.DieMoe
 {
     public partial class NOPOverlayForOP
     {
+        public static JsonRpcProcessor JsonRpcProcessor = new JsonRpcProcessor();
+
         private string name; // ？？？得看看OverlayForm拿这个做了什么
         private string id; // ？？？得看看OverlayForm拿这个做了什么
         private string url; // ？？？得看看OverlayForm拿这个做了什么
-        private object overlayApi; // ？？？得看看OverlayForm拿这个做了什么
+        private OverlayApi overlayApi; // ？？？得看看OverlayForm拿这个做了什么
 
         public NOPOverlayForOP(string name, string id, string url, int maxFrameRate, object overlayApi)
         {
             this.name = name; // 设置窗口标题，NOP -n 参数
             this.id = id; // 设置窗口ID，NOP -i 参数
             this.url = url; // 设置窗口加载的URL，NOP -s 参数
-            this.overlayApi = overlayApi; // 原版里的处理API操作的部分，需要想办法让NOP悬浮窗也能调用这个实例里的函数，暂定思路是通过WebSocket服务器和JSON RPC来桥接
+            this.overlayApi = (OverlayApi)overlayApi; // 原版里的处理API操作的部分，需要想办法让NOP悬浮窗也能调用这个实例里的函数，暂定思路是通过WebSocket服务器和JSON RPC来桥接
 
             Renderer = new NOPRenderer(this, this.id, this.name, this.url);
         }

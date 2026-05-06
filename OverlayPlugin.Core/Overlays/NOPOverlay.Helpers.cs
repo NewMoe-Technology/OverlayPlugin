@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
-using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
-using RainbowMage.OverlayPlugin.DieMoe;
 
 namespace RainbowMage.OverlayPlugin
 {
