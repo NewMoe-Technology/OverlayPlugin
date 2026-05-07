@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using Fleck;
 using Newtonsoft.Json.Linq;
 using NoOverlayPlugin.JsonRpc;
@@ -8,7 +9,7 @@ namespace RainbowMage.OverlayPlugin
 {
     public partial class WSServer
     {
-        class NOPConnectionHandler : IWSConnection
+        internal class NOPConnectionHandler : IWSConnection
         {
             public string Name => $"Overlay:{_overlayId}";
             private ILogger _logger;
@@ -38,6 +39,7 @@ namespace RainbowMage.OverlayPlugin
                     {
                         _dispatcher.UnsubscribeAll(this);
                         server._connections.Remove(this);
+                        NOPConnections.Remove(_overlayId, this);
                     }
                     catch (Exception ex)
                     {
@@ -54,6 +56,12 @@ namespace RainbowMage.OverlayPlugin
             }
 
             public void Close() => _conn.Close();
+
+            public void Notify(string method, params object[] args)
+            {
+                var request = new JsonRpcRequest(method, args.Select(arg => JToken.FromObject(arg)).ToList());
+                _conn.Send(request.Serialize());
+            }
 
             public void HandleEvent(JObject e)
             {
@@ -91,14 +99,15 @@ namespace RainbowMage.OverlayPlugin
                 var path = conn.ConnectionInfo.Path;
 
                 // /overlays/{id} — WebView2 overlay connections (NOPOverlay.exe)
-                if (path.StartsWith("/overlays/"))
+                if (path.StartsWith("/overlays/") && path.Length > "/overlays/".Length)
                 {
                     var overlayId = path.Substring("/overlays/".Length);
-                    if (overlayId.Length > 0)
+                    handler = new NOPConnectionHandler(overlayId, container.Resolve<ILogger>(), container.Resolve<EventDispatcher>(), conn, server);
+                    if (!NOPConnections.TryAdd(overlayId, handler))
                     {
-                        handler = new NOPConnectionHandler(overlayId, container.Resolve<ILogger>(), container.Resolve<EventDispatcher>(), conn, server);
-                        return true;
+                        handler.Close();
                     }
+                    return true;
                 }
                 handler = null;
                 return false;

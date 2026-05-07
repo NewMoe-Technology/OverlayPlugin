@@ -1,11 +1,15 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using CefSharp;
+using Newtonsoft.Json.Linq;
 using NoOverlayPlugin.JsonRpc;
 using RainbowMage.HtmlRenderer;
+using static Transitions.Transition;
 
 namespace RainbowMage.OverlayPlugin.DieMoe
 {
@@ -25,9 +29,9 @@ namespace RainbowMage.OverlayPlugin.DieMoe
             this.url = url; // 设置窗口加载的URL，NOP -s 参数
             this.overlayApi = (OverlayApi)overlayApi; // 原版里的处理API操作的部分，需要想办法让NOP悬浮窗也能调用这个实例里的函数，暂定思路是通过WebSocket服务器和JSON RPC来桥接
 
-            Renderer = new NOPRenderer(this, this.name, this.name, this.url);
+            Renderer = new NOPRenderer(this, this.id, this.name, this.url);
 
-            JsonRpcProcessor.AddMethod($"{this.name}:OverlayApi.callHandler", new Func<string, string>(data =>
+            JsonRpcProcessor.AddMethod($"{this.id}:OverlayApi.callHandler", new Func<string, string>(data =>
             {
                 Log.D($"{this}.JsonRpcProcessor received call to OverlayApi.callHandler with data: {data}");
                 try
@@ -41,12 +45,12 @@ namespace RainbowMage.OverlayPlugin.DieMoe
                     return "null";
                 }
             }));
-            JsonRpcProcessor.AddMethod($"{this.name}:Renderer.FireOnceBrowserStartLoading", new Func<string, string>(data =>
+            JsonRpcProcessor.AddMethod($"{this.id}:Renderer.FireOnceBrowserStartLoading", new Func<string, string>(data =>
             {
                 Renderer.FireOnceBrowserStartLoading(data);
                 return "null";
             }));
-            JsonRpcProcessor.AddMethod($"{this.name}:Renderer.FireOnceBrowserLoad", new Func<string, string>(data =>
+            JsonRpcProcessor.AddMethod($"{this.id}:Renderer.FireOnceBrowserLoad", new Func<string, string>(data =>
             {
                 Renderer.FireOnceBrowserLoad(data);
                 return "null";
@@ -187,6 +191,7 @@ namespace RainbowMage.OverlayPlugin.DieMoe
                 // 以后：$"-i \"{id}\" -h \"{host}\""
 
                 Log.D($"{Overlay}.NOPRenderer.BeginRender() 启动渲染进程 {args}");
+                NOPConnections.Reserve(Overlay.id);
                 _process = Process.Start(new ProcessStartInfo
                 {
                     FileName = Path.Combine("Plugins", "ACT.OverlayPlugin", "NOPOverlay.exe"),
@@ -227,9 +232,15 @@ namespace RainbowMage.OverlayPlugin.DieMoe
 
             internal void ExecuteScript(string script)
             {
-                // TODO: 需要给渲染进程发消息执行脚本
                 Log.D($"{Overlay}.NOPRenderer.执行JS(script={script.Substring(0, Math.Min(script?.Length ?? 0, 100))}...) called from:\n{new StackTrace(true)}");
-                //Overlay.Connection.ExecuteScript();
+                if (NOPConnections.TryGet(Overlay.id, out var conn))
+                {
+                    conn.Notify("Overlay.ExecuteScript", script);
+                }
+                else
+                {
+                    //this.scriptQueue.Add(script);
+                }
             }
 
             internal Bitmap Screenshot()
@@ -279,6 +290,86 @@ namespace RainbowMage.OverlayPlugin.DieMoe
                 }
                 Log.D($"{Overlay}.NOPRenderer.FireOnceBrowserLoad(data={data}) firing BrowserLoad event");
                 BrowserLoad?.Invoke(this, new BrowserLoadEventArgs(200, Url));
+            }
+        }
+    }
+
+    internal static class NOPConnections
+    {
+        static Dictionary<string, WSServer.NOPConnectionHandler> ConnectionByName = new Dictionary<string, WSServer.NOPConnectionHandler>();
+        static object lockConnectionByName = new object();
+
+        internal static bool Reserve(string key)
+        {
+            lock (lockConnectionByName)
+            {
+                Log.D($"NOPConnections.Reserve({key}) 预定连接位置");
+                if (!ConnectionByName.ContainsKey(key))
+                {
+                    Log.D($"NOPConnections.Reserve({key}) 预定成功");
+                    ConnectionByName[key] = null;
+                    return true;
+                }
+            }
+            Log.D($"NOPConnections.Reserve({key}) 已经被预定了");
+            return false;
+        }
+
+        internal static bool Unreserve(string key)
+        {
+            lock (lockConnectionByName)
+            {
+                Log.D($"NOPConnections.Unreserve({key}) 取消预定连接位置");
+                if (ConnectionByName.ContainsKey(key))
+                {
+                    Log.D($"NOPConnections.Unreserve({key}) 取消预定成功");
+                    ConnectionByName[key]?.Close();
+                    ConnectionByName.Remove(key);
+                    return true;
+                }
+            }
+            Log.D($"NOPConnections.Unreserve({key}) 没有找到预定的连接");
+            return false;
+        }
+
+        internal static bool TryAdd(string key, WSServer.NOPConnectionHandler conn)
+        {
+            lock (lockConnectionByName)
+            {
+                Log.D($"NOPConnections.TryAdd({key}) 尝试添加连接");
+                if (ConnectionByName.ContainsKey(key) && ConnectionByName[key] is null)
+                {
+                    Log.D($"NOPConnections.TryAdd({key}) 添加成功");
+                    ConnectionByName[key] = conn;
+                    return true;
+                }
+            }
+            Log.D($"NOPConnections.TryAdd({key}) 没有预定位置或者已经有连接了");
+            return false;
+        }
+
+        internal static void Remove(string id, WSServer.NOPConnectionHandler conn)
+        {
+            lock (lockConnectionByName)
+            {
+                Log.D($"NOPConnections.Remove({id}) 尝试移除连接");
+                if (ConnectionByName.TryGetValue(id, out var existing) && existing == conn)
+                {
+                    Log.D($"NOPConnections.Remove({id}) 移除成功");
+                    ConnectionByName[id] = null;
+                }
+                else
+                {
+                    Log.D($"NOPConnections.Remove({id}) 没有找到匹配的连接");
+                }
+            }
+        }
+
+        internal static bool TryGet(string id, out WSServer.NOPConnectionHandler conn)
+        {
+            lock (lockConnectionByName)
+            {
+                return ConnectionByName.TryGetValue(id, out conn);
             }
         }
     }
