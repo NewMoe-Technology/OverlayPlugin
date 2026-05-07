@@ -233,7 +233,7 @@ namespace RainbowMage.OverlayPlugin.DieMoe
             internal void ExecuteScript(string script)
             {
                 Log.D($"{Overlay}.NOPRenderer.执行JS(script={script.Substring(0, Math.Min(script?.Length ?? 0, 100))}...) called from:\n{new StackTrace(true)}");
-                if (NOPConnections.TryGet(Overlay.id, out var conn))
+                if (NOPConnections.TryGet(Overlay.id, out var conn) && conn != null)
                 {
                     conn.Notify("Overlay.ExecuteScript", script);
                 }
@@ -270,26 +270,26 @@ namespace RainbowMage.OverlayPlugin.DieMoe
 
             bool firedBrowserStartLoading = false;
             bool firedBrowserLoad = false;
-            internal void FireOnceBrowserStartLoading(string data)
+            internal void FireOnceBrowserStartLoading(string url)
             {
                 if (firedBrowserStartLoading)
                 {
-                    Log.D($"{Overlay}.NOPRenderer.FireOnceBrowserStartLoading(data={data}) called but already fired once");
+                    Log.D($"{Overlay}.NOPRenderer.FireOnceBrowserStartLoading(url={url}) called but already fired once");
                     return;
                 }
-                Log.D($"{Overlay}.NOPRenderer.FireOnceBrowserStartLoading(data={data}) firing BrowserStartLoading event");
-                BrowserStartLoading?.Invoke(this, new BrowserLoadEventArgs(0, Url));
+                Log.D($"{Overlay}.NOPRenderer.FireOnceBrowserStartLoading(url={url}) firing BrowserStartLoading event");
+                BrowserStartLoading?.Invoke(this, new BrowserLoadEventArgs(0, url));
             }
 
-            internal void FireOnceBrowserLoad(string data)
+            internal void FireOnceBrowserLoad(string url)
             {
                 if (firedBrowserLoad)
                 {
-                    Log.D($"{Overlay}.NOPRenderer.FireOnceBrowserLoad(data={data}) called but already fired once");
+                    Log.D($"{Overlay}.NOPRenderer.FireOnceBrowserLoad(url={url}) called but already fired once");
                     return;
                 }
-                Log.D($"{Overlay}.NOPRenderer.FireOnceBrowserLoad(data={data}) firing BrowserLoad event");
-                BrowserLoad?.Invoke(this, new BrowserLoadEventArgs(200, Url));
+                Log.D($"{Overlay}.NOPRenderer.FireOnceBrowserLoad(url={url}) firing BrowserLoad event");
+                BrowserLoad?.Invoke(this, new BrowserLoadEventArgs(200, url));
             }
         }
     }

@@ -37,6 +37,7 @@ namespace RainbowMage.OverlayPlugin
 
                     try
                     {
+                        // TODO: NOPOverlayForOP才需要unsubscribe all，也许需要把NOPConnections改成NOPOverlays。
                         _dispatcher.UnsubscribeAll(this);
                         server._connections.Remove(this);
                         NOPConnections.Remove(_overlayId, this);
