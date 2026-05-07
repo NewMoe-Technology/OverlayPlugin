@@ -65,13 +65,13 @@ namespace NoOverlayPlugin.JsonRpc
         internal static string GetMethodKey(string methodName, Delegate @delegate)
         {
             var numOfParams = @delegate.Method.GetParameters().Count();
-            return numOfParams <= 0 ? methodName : methodName + "/" + numOfParams.ToString();
+            return methodName + "/" + numOfParams.ToString();
         }
 
         internal static string GetMethodKey(JsonRpcRequest request)
         {
             var numOfParams = request.Params.Length;
-            return numOfParams <= 0 ? request.Method : request.Method + "/" + numOfParams.ToString();
+            return request.Method + "/" + numOfParams.ToString();
         }
     }
 }
