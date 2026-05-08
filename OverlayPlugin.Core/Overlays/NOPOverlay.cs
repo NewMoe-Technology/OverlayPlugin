@@ -45,15 +45,31 @@ namespace RainbowMage.OverlayPlugin.DieMoe
                     return "null";
                 }
             }));
-            // TODO: 触发这个事件时MiniParseOverlay会将当前URL写回Config，然而下面拼命令行时会将file://改成-d参数，这样就会丢掉URL，需要解决这个问题。
-            JsonRpcProcessor.AddMethod($"{this.id}:Renderer.FireOnceBrowserStartLoading", new Func<string, string>(data =>
+            // 需要将实际抵达的URL传回去，因为原版悬浮窗支持通过重定向批量修改用户的旧URL。
+            JsonRpcProcessor.AddMethod($"{this.id}:Renderer.FireOnceBrowserStartLoading", new Func<string, string>(overlayUrl =>
             {
-                Renderer.FireOnceBrowserStartLoading(data);
+                if (overlayUrl.Contains("://127.0.0.1") && overlayUrl != Url)
+                {
+                    Log.D($"{this}.BrowserStartLoading: 渲染进程错误返回了本地服务器的URL，已自动恢复为正确URL");
+                    Renderer.FireOnceBrowserStartLoading(Url);
+                }
+                else
+                {
+                    Renderer.FireOnceBrowserStartLoading(overlayUrl);
+                }
                 return "null";
             }));
-            JsonRpcProcessor.AddMethod($"{this.id}:Renderer.FireOnceBrowserLoad", new Func<string, string>(data =>
+            JsonRpcProcessor.AddMethod($"{this.id}:Renderer.FireOnceBrowserLoad", new Func<string, string>(overlayUrl =>
             {
-                Renderer.FireOnceBrowserLoad(data);
+                if (overlayUrl.Contains("://127.0.0.1") && overlayUrl != Url)
+                {
+                    Log.D($"{this}.BrowserLoad: 渲染进程错误返回了本地服务器的URL，已自动恢复为正确URL.");
+                    Renderer.FireOnceBrowserLoad(Url);
+                }
+                else
+                {
+                    Renderer.FireOnceBrowserLoad(overlayUrl);
+                }
                 return "null";
             }));
         }
