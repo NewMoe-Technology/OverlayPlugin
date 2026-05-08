@@ -45,6 +45,7 @@ namespace RainbowMage.OverlayPlugin.DieMoe
                     return "null";
                 }
             }));
+            // TODO: 触发这个事件时MiniParseOverlay会将当前URL写回Config，然而下面拼命令行时会将file://改成-d参数，这样就会丢掉URL，需要解决这个问题。
             JsonRpcProcessor.AddMethod($"{this.id}:Renderer.FireOnceBrowserStartLoading", new Func<string, string>(data =>
             {
                 Renderer.FireOnceBrowserStartLoading(data);
@@ -175,20 +176,25 @@ namespace RainbowMage.OverlayPlugin.DieMoe
 
             internal void BeginRender()
             {
-                // TODO: 启动渲染进程
                 Log.D($"{Overlay}.NOPRenderer.BeginRender() 启动渲染进程");
+
+                var url = Url;
+                if (url.StartsWith("file:///"))
+                {
+                    var uri = new Uri(url);
+                    var path = uri.LocalPath.StartsWith("/") ? Path.GetFullPath(uri.LocalPath.Substring(1)) : uri.LocalPath;
+                    url = "file:///" + path + uri.Query;
+                }
 
                 // 拼命令行
                 Directory.CreateDirectory(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "NOP", "Renderer")); // 确保目录存在
                 var overlayConfigPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "NOP", "Renderer", $"{Id}.oss");
-                var args = (Url.StartsWith("file:///") ? $"-d \"{Url.Substring(8)}\"" : $"-s \"{Url}\"") +
+                var args = $"-s \"{url}\"" +
                     $" -n \"{Name}\"" +
                     $" -p {Process.GetCurrentProcess().Id}" +
                     $" -c \"{overlayConfigPath}\"" +
                     $" -i {Id} -h 127.0.0.1:10501" +
                     $" --devtools --esc --show-task-icon";
-                // -i/-h 先不加（没有 WebSocket Server 时用不了）
-                // 以后：$"-i \"{id}\" -h \"{host}\""
 
                 Log.D($"{Overlay}.NOPRenderer.BeginRender() 启动渲染进程 {args}");
                 NOPConnections.Reserve(Overlay.id);
