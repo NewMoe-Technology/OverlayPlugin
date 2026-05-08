@@ -176,20 +176,13 @@ namespace RainbowMage.OverlayPlugin.DieMoe
 
             internal void BeginRender()
             {
+                // TODO: 启动渲染进程
                 Log.D($"{Overlay}.NOPRenderer.BeginRender() 启动渲染进程");
-
-                var url = Url;
-                if (url.StartsWith("file:///"))
-                {
-                    var uri = new Uri(url);
-                    var path = uri.LocalPath.StartsWith("/") ? Path.GetFullPath(uri.LocalPath.Substring(1)) : uri.LocalPath;
-                    url = "file:///" + path + uri.Query;
-                }
 
                 // 拼命令行
                 Directory.CreateDirectory(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "NOP", "Renderer")); // 确保目录存在
                 var overlayConfigPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "NOP", "Renderer", $"{Id}.oss");
-                var args = $"-s \"{url}\"" +
+                var args = (Url.StartsWith("file:///") ? $"-d \"{Url.Substring(8)}\"" : $"-s \"{Url}\"") +
                     $" -n \"{Name}\"" +
                     $" -p {Process.GetCurrentProcess().Id}" +
                     $" -c \"{overlayConfigPath}\"" +
