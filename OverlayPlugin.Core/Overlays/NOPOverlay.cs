@@ -108,7 +108,6 @@ namespace RainbowMage.OverlayPlugin.DieMoe
 
         internal void Close()
         {
-            // TODO: 需要给渲染进程发消息关闭窗口
             // 调用时是和Close一起的，不过可以考虑把关闭进程的逻辑放在这里，destructor里也调用一次以防万一。
             Log.D($"{this}.Close() called from:\n{new StackTrace(true)}");
             Renderer.EndRender();
@@ -172,10 +171,6 @@ namespace RainbowMage.OverlayPlugin.DieMoe
             // 如果启用则在产生 JS console 日志时触发
             public event EventHandler<BrowserConsoleLogEventArgs> BrowserConsoleLog; // ？？？需要检查这些被用来做什么了
 
-            // 思路
-            // BrowserStartLoading 应该在 Aardio 导航时触发。
-            // BrowserLoad 在 WebView2 加载完成时触发。
-
             Process _process;
             NOPOverlayForOP Overlay { get; }
             string Id { get; }
@@ -192,7 +187,6 @@ namespace RainbowMage.OverlayPlugin.DieMoe
 
             internal void BeginRender()
             {
-                // TODO: 启动渲染进程
                 Log.D($"{Overlay}.NOPRenderer.BeginRender() 启动渲染进程");
 
                 // 拼命令行
@@ -236,7 +230,6 @@ namespace RainbowMage.OverlayPlugin.DieMoe
 
             internal void EndRender()
             {
-                // TODO: 停止渲染进程
                 Log.D($"{Overlay}.NOPRenderer.EndRender() 停止渲染进程, called from:\n{new StackTrace(true)}");
 
                 if (_process?.HasExited != true)

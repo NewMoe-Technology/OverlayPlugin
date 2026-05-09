@@ -37,7 +37,9 @@ namespace RainbowMage.OverlayPlugin
 
                     try
                     {
-                        // TODO: NOPOverlayForOP才需要unsubscribe all，也许需要把NOPConnections改成NOPOverlays。
+                        // 使用NOPOverlayForOP的OverlayBase才需要unsubscribe all
+                        // 不过OverlayBase会在BrowserStartLoading时UnsubscribeAll
+                        // 这里主要是用以保持和WSServer的实现的一致性。
                         _dispatcher.UnsubscribeAll(this);
                         server._connections.Remove(this);
                         NOPConnections.Remove(_overlayId, this);
