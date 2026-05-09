@@ -42,7 +42,7 @@ namespace RainbowMage.OverlayPlugin
                         // 这里主要是用以保持和WSServer的实现的一致性。
                         _dispatcher.UnsubscribeAll(this);
                         server._connections.Remove(this);
-                        NOPConnections.Remove(_overlayId, this);
+                        NOPOverlays.Get(overlayId)?.Connection_OnDisconnected(this);
                     }
                     catch (Exception ex)
                     {
@@ -106,7 +106,11 @@ namespace RainbowMage.OverlayPlugin
                 {
                     var overlayId = path.Substring("/overlays/".Length);
                     handler = new NOPConnectionHandler(overlayId, container.Resolve<ILogger>(), container.Resolve<EventDispatcher>(), conn, server);
-                    if (!NOPConnections.TryAdd(overlayId, handler))
+                    if (NOPOverlays.TryGet(overlayId, out var overlay))
+                    {
+                        overlay.Connection_OnConnected(handler);
+                    }
+                    else
                     {
                         handler.Close();
                     }

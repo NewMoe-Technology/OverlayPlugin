@@ -3,13 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
-using System.Threading.Tasks;
 using System.Windows.Forms;
-using CefSharp;
-using Newtonsoft.Json.Linq;
 using NoOverlayPlugin.JsonRpc;
 using RainbowMage.HtmlRenderer;
-using static Transitions.Transition;
 
 namespace RainbowMage.OverlayPlugin.DieMoe
 {
@@ -17,13 +13,34 @@ namespace RainbowMage.OverlayPlugin.DieMoe
     {
         public static JsonRpcProcessor JsonRpcProcessor = new JsonRpcProcessor();
 
-        private string name; // ？？？得看看OverlayForm拿这个做了什么
-        private string id; // ？？？得看看OverlayForm拿这个做了什么
-        private string url; // ？？？得看看OverlayForm拿这个做了什么
-        private OverlayApi overlayApi; // ？？？得看看OverlayForm拿这个做了什么
+        private string name; // 真的就只是名字而已
+        private string id; // 一个没什么用的uuid，每次启动都是重新生成的，用来关联连接和实例还算够用。
+        private string url; // 设置窗口加载的URL，NOP -s 参数
+        private OverlayApi overlayApi; // 原版里被传入CefSharp绑定成为OverlayPluginApi的变量。
+
+        internal WSServer.NOPConnectionHandler Connection { get; set; }
+
+        internal void Connection_OnConnected(WSServer.NOPConnectionHandler conn)
+        {
+            if (Connection != null)
+            {
+                Log.W($"{this}.Connection_OnConnected: 上一个链接尚未断开，却收到了新的连接，已自动放弃上一个连接");
+            }
+            Connection = conn;
+        }
+
+        internal void Connection_OnDisconnected(WSServer.NOPConnectionHandler conn)
+        {
+            if (Connection == null)
+            {
+                Log.W($"{this}.Connection_OnDisconnected: 收到了连接断开的消息，但当前没有连接，已忽略");
+            }
+            Connection = null;
+        }
 
         public NOPOverlayForOP(string name, string id, string url, int maxFrameRate, object overlayApi)
         {
+            NOPOverlays.Add(id, this);
             this.name = name; // 设置窗口标题，NOP -n 参数，以及提供NOP -i 参数，因为OverlayPlugin的id是加载时生成的，不可靠。
             this.id = id; // 虽然id仅在本次加载中一致，但可用于将悬浮窗实例与WS连接关联。
             this.url = url; // 设置窗口加载的URL，NOP -s 参数
@@ -83,11 +100,41 @@ namespace RainbowMage.OverlayPlugin.DieMoe
         Point location;
         Size size;
 
-        // ActiveWindowChangedHandler会在每次焦点窗口改变时设置所有悬浮窗的Visible
-        public bool Visible { get => isVisible; internal set { if (isVisible != value) { Log.D($"{this}.set_Visible({value})"); } isVisible = value; } } // TODO: set时需要给渲染进程发消息
-        public bool IsClickThru { get => isClickThru; internal set { Log.D($"{this}.set_IsClickThru({value})"); isClickThru = value; } } // TODO: set时需要给渲染进程发消息
-        public bool Locked { get => isLocked; internal set { Log.D($"{this}.set_Locked({value})"); isLocked = value; } } // TODO: set时需要给渲染进程发消息
         public string Url { get => url; internal set { Log.D($"{this}.set_Url({value})"); url = value; } } // TODO: set时需要给渲染进程发消息
+        public bool Visible
+        {
+            get => isVisible;
+            internal set
+            {
+                if (isVisible != value)
+                {
+                    // 只在发生变化时打日志，因为ActiveWindowChangedHandler会在每次焦点窗口改变时设置所有悬浮窗的Visible。
+                    Log.D($"{this}.set_Visible({value})");
+                }
+                isVisible = value;
+                Connection?.Notify("Overlay.SetVisible", isVisible);
+            }
+        }
+        public bool IsClickThru
+        {
+            get => isClickThru;
+            internal set
+            {
+                Log.D($"{this}.set_IsClickThru({value})");
+                isClickThru = value;
+                Connection?.Notify("Overlay.SetClickthrough", isClickThru);
+            }
+        }
+        public bool Locked
+        {
+            get => isLocked;
+            internal set
+            {
+                Log.D($"{this}.set_Locked({value})");
+                isLocked = value;
+                Connection?.Notify("Overlay.SetWindowLocked", isLocked);
+            }
+        }
 
         public FormStartPosition StartPosition { get => startPosition; internal set { Log.D($"{this}.set_StartPosition({value})"); startPosition = value; } } // .NET FormStartPosition 枚举，原版 OverlayBase.cs:136 用来让系统选初始位置。NOP 不需要——Aardio 自己管定位，或以后再实现，例如传参什么的。
         public Point Location { get => location; internal set { Log.D($"{this}.set_Location({value})"); location = value; } } // 这个与Size合在一起才是完整的窗口Rectangle，TODO: set时需要给渲染进程发消息（应该是设置窗口位置）
@@ -200,7 +247,6 @@ namespace RainbowMage.OverlayPlugin.DieMoe
                     $" --devtools --esc --show-task-icon";
 
                 Log.D($"{Overlay}.NOPRenderer.BeginRender() 启动渲染进程 {args}");
-                NOPConnections.Reserve(Overlay.id);
                 _process = Process.Start(new ProcessStartInfo
                 {
                     FileName = Path.Combine("Plugins", "ACT.OverlayPlugin", "NOPOverlay.exe"),
@@ -241,9 +287,9 @@ namespace RainbowMage.OverlayPlugin.DieMoe
             internal void ExecuteScript(string script)
             {
                 Log.D($"{Overlay}.NOPRenderer.执行JS(script={script.Substring(0, Math.Min(script?.Length ?? 0, 100))}...) called from:\n{new StackTrace(true)}");
-                if (NOPConnections.TryGet(Overlay.id, out var conn) && conn != null)
+                if (Overlay.Connection != null)
                 {
-                    conn.Notify("Overlay.ExecuteScript", script);
+                    Overlay.Connection.Notify("Overlay.ExecuteScript", script);
                 }
                 else
                 {
@@ -302,82 +348,57 @@ namespace RainbowMage.OverlayPlugin.DieMoe
         }
     }
 
-    internal static class NOPConnections
+    internal static class NOPOverlays
     {
-        static Dictionary<string, WSServer.NOPConnectionHandler> ConnectionByName = new Dictionary<string, WSServer.NOPConnectionHandler>();
-        static object lockConnectionByName = new object();
+        static Dictionary<string, NOPOverlayForOP> OverlayById = new Dictionary<string, NOPOverlayForOP>();
+        static object lockOverlayById = new object();
 
-        internal static bool Reserve(string key)
+        internal static bool Add(string key, NOPOverlayForOP overlay)
         {
-            lock (lockConnectionByName)
+            lock (lockOverlayById)
             {
-                Log.D($"NOPConnections.Reserve({key}) 预定连接位置");
-                if (!ConnectionByName.ContainsKey(key))
+                Log.D($"NOPOverlays.TryAdd({key}) 添加悬浮窗");
+                if (!OverlayById.ContainsKey(key))
                 {
-                    Log.D($"NOPConnections.Reserve({key}) 预定成功");
-                    ConnectionByName[key] = null;
+                    Log.D($"NOPOverlays.TryAdd({key}) 添加成功");
+                    OverlayById[key] = overlay;
                     return true;
                 }
             }
-            Log.D($"NOPConnections.Reserve({key}) 已经被预定了");
+            Log.W($"NOPOverlays.TryAdd({key}) 冲突！悬浮窗已存在。");
             return false;
         }
 
-        internal static bool Unreserve(string key)
+        internal static NOPOverlayForOP Get(string key)
         {
-            lock (lockConnectionByName)
+            lock (lockOverlayById)
             {
-                Log.D($"NOPConnections.Unreserve({key}) 取消预定连接位置");
-                if (ConnectionByName.ContainsKey(key))
+                if (OverlayById.TryGetValue(key, out var overlay))
                 {
-                    Log.D($"NOPConnections.Unreserve({key}) 取消预定成功");
-                    ConnectionByName[key]?.Close();
-                    ConnectionByName.Remove(key);
-                    return true;
-                }
-            }
-            Log.D($"NOPConnections.Unreserve({key}) 没有找到预定的连接");
-            return false;
-        }
-
-        internal static bool TryAdd(string key, WSServer.NOPConnectionHandler conn)
-        {
-            lock (lockConnectionByName)
-            {
-                Log.D($"NOPConnections.TryAdd({key}) 尝试添加连接");
-                if (ConnectionByName.ContainsKey(key) && ConnectionByName[key] is null)
-                {
-                    Log.D($"NOPConnections.TryAdd({key}) 添加成功");
-                    ConnectionByName[key] = conn;
-                    return true;
-                }
-            }
-            Log.D($"NOPConnections.TryAdd({key}) 没有预定位置或者已经有连接了");
-            return false;
-        }
-
-        internal static void Remove(string id, WSServer.NOPConnectionHandler conn)
-        {
-            lock (lockConnectionByName)
-            {
-                Log.D($"NOPConnections.Remove({id}) 尝试移除连接");
-                if (ConnectionByName.TryGetValue(id, out var existing) && existing == conn)
-                {
-                    Log.D($"NOPConnections.Remove({id}) 移除成功");
-                    ConnectionByName[id] = null;
+                    return overlay;
                 }
                 else
                 {
-                    Log.D($"NOPConnections.Remove({id}) 没有找到匹配的连接");
+                    Log.D($"NOPOverlays.Get({key}) 没有找到悬浮窗");
+                    return null;
                 }
             }
         }
 
-        internal static bool TryGet(string id, out WSServer.NOPConnectionHandler conn)
+        internal static bool TryGet(string key, out NOPOverlayForOP overlay)
         {
-            lock (lockConnectionByName)
+            lock (lockOverlayById)
             {
-                return ConnectionByName.TryGetValue(id, out conn);
+                if (OverlayById.TryGetValue(key, out overlay))
+                {
+                    return true;
+                }
+                else
+                {
+                    Log.D($"NOPOverlays.Get({key}) 没有找到悬浮窗");
+                    overlay = null;
+                    return false;
+                }
             }
         }
     }
