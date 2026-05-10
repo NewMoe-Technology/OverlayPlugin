@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using NoOverlayPlugin.JsonRpc;
 using RainbowMage.HtmlRenderer;
@@ -106,7 +107,17 @@ namespace RainbowMage.OverlayPlugin.DieMoe
         Point location;
         Size size;
 
-        public string Url { get => url; internal set { Log.D($"{this}.set_Url({value})"); url = value; } } // TODO: set时需要给渲染进程发消息
+        public string Url
+        {
+            get => url;
+            internal set
+            {
+                Log.D($"{this}.set_Url({value})");
+                url = value;
+                // TODO: file路径和http路径处理逻辑不一样，需要甄别，如果不一样则需要重启渲染进程。
+                Connection?.Notify("Overlay.OpenUrl", url);
+            }
+        }
         public bool Visible
         {
             get => isVisible;
@@ -176,7 +187,7 @@ namespace RainbowMage.OverlayPlugin.DieMoe
         {
             // TODO: 需要给渲染进程发消息重新加载页面
             Log.D($"{this}.Reload() called from:\n{new StackTrace(true)}");
-            throw new NotImplementedException();
+            Connection?.Notify("Overlay.Reload");
         }
 
         internal void SetAcceptFocus(bool accept)
@@ -225,6 +236,7 @@ namespace RainbowMage.OverlayPlugin.DieMoe
             public event EventHandler<BrowserConsoleLogEventArgs> BrowserConsoleLog; // ？？？需要检查这些被用来做什么了
 
             Process _process;
+            bool _stopped; // 渲染进程意外退出后会自动重启，需要一个变量知道何时应该自动重启。
             NOPOverlayForOP Overlay { get; }
             string Id { get; }
             string Name { get; }
@@ -239,6 +251,13 @@ namespace RainbowMage.OverlayPlugin.DieMoe
             }
 
             internal void BeginRender()
+            {
+                Log.D($"{Overlay}.NOPRenderer.BeginRender() 开始渲染");
+                _stopped = false;
+                StartProcess();
+            }
+
+            void StartProcess()
             {
                 Log.D($"{Overlay}.NOPRenderer.BeginRender() 启动渲染进程");
 
@@ -273,20 +292,37 @@ namespace RainbowMage.OverlayPlugin.DieMoe
                 _process.Exited += OnProcessExited;
             }
 
-            private void OnProcessExited(object sender, EventArgs e)
+            void OnProcessExited(object sender, EventArgs e)
             {
                 Log.D($"{Overlay}.NOPRenderer.OnProcessExited() 渲染进程已退出");
                 Handle = IntPtr.Zero;
                 _process?.Dispose();
                 _process = null;
+
+                if (!_stopped)
+                {
+                    Log.W($"{Overlay}.NOPRenderer.OnProcessExited() 渲染进程意外退出，正在重启...");
+                    Task.Run(() =>
+                    {
+                        try
+                        {
+                            StartProcess();
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.E($"{Overlay}.NOPRenderer.OnProcessExited() 重启渲染进程失败: {ex}");
+                        }
+                    });
+                }
             }
 
             public IntPtr Handle { get; private set; }
 
             internal void EndRender()
             {
-                Log.D($"{Overlay}.NOPRenderer.EndRender() 停止渲染进程, called from:\n{new StackTrace(true)}");
+                Log.D($"{Overlay}.NOPRenderer.BeginRender() 停止渲染");
 
+                _stopped = true;
                 if (_process?.HasExited != true)
                 {
                     _process?.Kill();
@@ -302,6 +338,7 @@ namespace RainbowMage.OverlayPlugin.DieMoe
                 }
                 else
                 {
+                    // TODO: 连接还没有建立好，先把脚本放到队列里等连接建立好了再发。不过因为是本地连接，应该不会断掉吧。
                     //this.scriptQueue.Add(script);
                 }
             }
@@ -315,20 +352,23 @@ namespace RainbowMage.OverlayPlugin.DieMoe
 
             internal void SetMuted(bool v)
             {
-                // TODO: 需要给渲染进程发消息设置静音
-                Log.D($"{Overlay}.NOPRenderer.SetMuted(v={v}) called from:\n{new StackTrace(true)}");
+                // 需要给渲染进程发消息设置静音
+                Log.D($"{Overlay}.NOPRenderer.SetMuted(v={v})");
+                Overlay.Connection?.Notify("Overlay.SetMuted", v);
             }
 
             internal void SetZoomLevel(double level)
             {
                 // 不需要实现，以后可以考虑，数值的含义还没搞明白。
                 Log.D($"{Overlay}.NOPRenderer.SetZoomLevel(v={level}) called from:\n{new StackTrace(true)}");
+                Overlay.Connection?.Notify("Overlay.SetZoomLevel", level);
             }
 
             internal void showDevTools(bool open = true)
             {
                 // 不需要实现，以后再看看，Aardio的WebView2封装刚好有一个showDevtoolsWindow函数可以用。
-                Log.D($"{Overlay}.NOPRenderer.showDevTools(open={open}) called from:\n{new StackTrace(true)}");
+                Log.D($"{Overlay}.NOPRenderer.showDevTools(open={open})");
+                Overlay.Connection?.Notify("Overlay.ShowDevTools");
             }
 
             bool firedBrowserStartLoading = false;
