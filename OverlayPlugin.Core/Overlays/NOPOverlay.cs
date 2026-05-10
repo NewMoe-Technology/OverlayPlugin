@@ -42,7 +42,7 @@ namespace RainbowMage.OverlayPlugin.DieMoe
         {
             NOPOverlays.Add(id, this);
             this.name = name; // 设置窗口标题，NOP -n 参数，以及提供NOP -i 参数，因为OverlayPlugin的id是加载时生成的，不可靠。
-            this.id = id; // 虽然id仅在本次加载中一致，但可用于将悬浮窗实例与WS连接关联。
+            this.id = id; // 悬浮窗插件会为每个悬浮窗分配一个uuid并保存到文件，但他自己的设置保存代码太烂，ACT退出时可能无法正常保存导致状态丢失。
             this.url = url; // 设置窗口加载的URL，NOP -s 参数
             this.overlayApi = (OverlayApi)overlayApi; // 原版里的处理API操作的部分，需要想办法让NOP悬浮窗也能调用这个实例里的函数，暂定思路是通过WebSocket服务器和JSON RPC来桥接
 
@@ -74,6 +74,12 @@ namespace RainbowMage.OverlayPlugin.DieMoe
                 {
                     Renderer.FireOnceBrowserStartLoading(overlayUrl);
                 }
+
+                // 赋值给自己来触发Notify，确保窗口状态符合保存的设置。
+                Visible = Visible;
+                IsClickThru = IsClickThru;
+                Locked = Locked;
+
                 return "null";
             }));
             JsonRpcProcessor.AddMethod($"{this.id}:Renderer.FireOnceBrowserLoad", new Func<string, string>(overlayUrl =>
@@ -243,8 +249,11 @@ namespace RainbowMage.OverlayPlugin.DieMoe
                     $" -n \"{Name}\"" +
                     $" -p {Process.GetCurrentProcess().Id}" +
                     $" -c \"{overlayConfigPath}\"" +
-                    $" -i {Id} -h 127.0.0.1:10501" +
-                    $" --devtools --esc --show-task-icon";
+                    $" -i {Id} -h 127.0.0.1:10501";
+
+#if DEBUG
+                args += " --devtools --esc --show-task-icon --log console";
+#endif
 
                 Log.D($"{Overlay}.NOPRenderer.BeginRender() 启动渲染进程 {args}");
                 _process = Process.Start(new ProcessStartInfo
