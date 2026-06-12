@@ -143,8 +143,8 @@ namespace RainbowMage.OverlayPlugin.EventSources
                 {
                     var partyMembers = new List<dynamic>();
 
-                    var memory74 = new PartyMemory74(container);
-                    var crossRealmList = memory74.GetCrossRealmParty();
+                    var memory75 = new PartyMemory75(container);
+                    var crossRealmList = memory75.GetCrossRealmParty();
 
                     foreach (var member in crossRealmList)
                     {
