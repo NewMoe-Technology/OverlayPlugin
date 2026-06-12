@@ -14,7 +14,7 @@ namespace RainbowMage.OverlayPlugin.MemoryProcessors.Party
         private FFXIVMemory memory;
         private ILogger logger;
         
-        public PartyMemory74(TinyIoCContainer container)
+        public PartyMemory75(TinyIoCContainer container)
         {
             logger = container.Resolve<ILogger>();
             memory = container.Resolve<FFXIVMemory>();
