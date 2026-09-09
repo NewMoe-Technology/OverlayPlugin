@@ -9,12 +9,12 @@
     ]
   },
   "FFXIV_ACT_Plugin": {
-    "url": "https://github.com/ravahn/FFXIV_ACT_Plugin/raw/master/Releases/FFXIV_ACT_Plugin_SDK_3.0.2.7.zip",
+    "url": "https://github.com/NewMoe-Technology/FFXIV_ACT_Plugin_CN/raw/main/SDK/3.0.3.0-CN7.56/3.0.3.0-CN7.56.zip",
     "dest": "Thirdparty/FFXIV_ACT_Plugin",
     "strip": 0,
     "hash": [
       "sha256",
-      "382f8a534f31c4ecc393a4aec9bf65d44c5d14dccc761fb3c9d179f807c27556"
+      "20f25df70fe4f493d177f709cdb616a380294aec9687ae8bfc9a966cd24fe921"
     ]
   },
   "FFXIVClientStructs": {
