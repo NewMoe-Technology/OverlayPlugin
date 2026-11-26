@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RainbowMage.OverlayPlugin.MemoryProcessors.Combatant;
@@ -54,8 +56,25 @@ namespace RainbowMage.OverlayPlugin
 
         private int exceptionCount = 0;
         private const int maxExceptionsLogged = 3;
+        private const int GameVersionPollIntervalMs = 500;
+        private const int MaxRemoteFetchAttempts = 3;
+        private const int RemoteFetchRetryBaseDelayMs = 15000;
 
-        private bool haveAttemptedOpcodeDownload = false;
+        private sealed class RemoteFetchState
+        {
+            public bool Succeeded;
+            public bool RetryPending;
+            public int FailureCount;
+        }
+
+        private readonly object opcodeLock = new object();
+        // 以下状态只在 opcodeLock 内修改；generation 递增即通知所有 PacketHelper 丢弃已缓存的 opcode
+        private int generation = 0;
+        private string gameVersion;
+        private bool remoteFetchInProgress = false;
+        // 不同区域的版本号字符串可能相同，拉取状态须按区域和版本共同区分
+        private readonly Dictionary<string, RemoteFetchState> remoteFetchStates = new Dictionary<string, RemoteFetchState>();
+        private int nextGameVersionPollTick;
 
         private const string remoteOpcodeUrl = "https://assets.diemoe.net/OverlayPlugin/OverlayPlugin.Core/resources/opcodes.jsonc";
 
@@ -65,9 +84,51 @@ namespace RainbowMage.OverlayPlugin
             logger = container.Resolve<ILogger>();
             repository = container.Resolve<FFXIVRepository>();
             config = container.Resolve<PluginConfig>();
+            nextGameVersionPollTick = Environment.TickCount;
 
             LoadCachedOpcodesFromConfig();
             LoadOpcodesFromFile();
+        }
+
+        public int GetCacheGeneration()
+        {
+            PollGameVersionIfDue();
+            return Volatile.Read(ref generation);
+        }
+
+        private void PollGameVersionIfDue()
+        {
+            var now = Environment.TickCount;
+            var due = Volatile.Read(ref nextGameVersionPollTick);
+            // TickCount 是 int 毫秒计数，开机约 24.9 天后溢出为负数，按差值比较才能跨过溢出点
+            if (unchecked(now - due) < 0)
+                return;
+            if (Interlocked.CompareExchange(ref nextGameVersionPollTick, unchecked(now + GameVersionPollIntervalMs), due) != due)
+                return;
+
+            string version;
+            try
+            {
+                version = repository.GetGameVersion();
+            }
+            catch (Exception ex)
+            {
+                LogException($"Failed to read game version: {ex}");
+                return;
+            }
+
+            // 游戏退出后版本号可能变空，沿用上一次的版本比回退到最新版本更准确
+            if (string.IsNullOrEmpty(version))
+                return;
+
+            lock (opcodeLock)
+            {
+                if (version == gameVersion)
+                    return;
+
+                gameVersion = version;
+                Interlocked.Increment(ref generation);
+            }
         }
 
         private bool LoadCachedOpcodesFromConfig()
@@ -75,7 +136,7 @@ namespace RainbowMage.OverlayPlugin
             var versionStr = config.CachedOpcodeOverlayPluginVersion;
             Version version;
 
-            if (versionStr == "")
+            if (string.IsNullOrEmpty(versionStr))
             {
                 return false;
             }
@@ -101,7 +162,11 @@ namespace RainbowMage.OverlayPlugin
 
             try
             {
-                opcodesConfig = config.CachedOpcodeFile.ToObject<Opcodes>();
+                var parsed = config.CachedOpcodeFile?.ToObject<Opcodes>();
+                lock (opcodeLock)
+                {
+                    opcodesConfig = parsed;
+                }
             }
             catch (Exception ex)
             {
@@ -114,25 +179,87 @@ namespace RainbowMage.OverlayPlugin
             return true;
         }
 
-        private void SaveRemoteOpcodesToConfig()
+        private bool SaveRemoteOpcodesToConfig()
         {
             try
             {
                 var response = HttpClientWrapper.Get(remoteOpcodeUrl);
                 var jsonData = JObject.Parse(response);
                 // Validate that this can convert properly before storing it.
-                JsonConvert.DeserializeObject<Opcodes>(response);
+                var parsed = jsonData.ToObject<Opcodes>();
+                if (parsed == null || parsed.Count == 0)
+                {
+                    LogException("Remote opcode error: fetched opcode map is empty");
+                    return false;
+                }
 
                 config.CachedOpcodeFile = jsonData;
                 config.CachedOpcodeOverlayPluginVersion = repository.GetOverlayPluginVersion().ToString();
+
+                lock (opcodeLock)
+                {
+                    opcodesConfig = parsed;
+                }
                 logger.Log(LogLevel.Debug, "Fetched remote opcodes");
-                LoadCachedOpcodesFromConfig();
+                return true;
             }
             catch (Exception ex)
             {
                 LogException($"Remote opcode error: {ex}");
-                return;
+                return false;
             }
+        }
+
+        private void FetchRemoteOpcodes(RemoteFetchState state)
+        {
+            var succeeded = SaveRemoteOpcodesToConfig();
+            var retryDelayMs = 0;
+
+            lock (opcodeLock)
+            {
+                remoteFetchInProgress = false;
+
+                if (succeeded)
+                {
+                    state.Succeeded = true;
+                }
+                else if (++state.FailureCount < MaxRemoteFetchAttempts)
+                {
+                    state.RetryPending = true;
+                    retryDelayMs = RemoteFetchRetryBaseDelayMs * state.FailureCount;
+                }
+
+                // 拉取期间的查询会把 0 缓存到当前代次，必须递增让它们重新解析
+                Interlocked.Increment(ref generation);
+            }
+
+            if (retryDelayMs > 0)
+            {
+                _ = ReleaseRemoteRetryAfterDelayAsync(state, retryDelayMs);
+            }
+        }
+
+        private async Task ReleaseRemoteRetryAfterDelayAsync(RemoteFetchState state, int delayMs)
+        {
+            await Task.Delay(delayMs).ConfigureAwait(false);
+
+            lock (opcodeLock)
+            {
+                state.RetryPending = false;
+                Interlocked.Increment(ref generation);
+            }
+        }
+
+        private RemoteFetchState GetRemoteFetchStateLocked(MachinaRegion machinaRegion, string version)
+        {
+            var key = machinaRegion + "|" + version;
+            if (!remoteFetchStates.TryGetValue(key, out var state))
+            {
+                state = new RemoteFetchState();
+                remoteFetchStates.Add(key, state);
+            }
+
+            return state;
         }
 
         private void ClearCachedOpcodes()
@@ -151,7 +278,11 @@ namespace RainbowMage.OverlayPlugin
             try
             {
                 var jsonData = File.ReadAllText(opcodesPath);
-                opcodesFile = JsonConvert.DeserializeObject<Opcodes>(jsonData);
+                var parsed = JsonConvert.DeserializeObject<Opcodes>(jsonData);
+                lock (opcodeLock)
+                {
+                    opcodesFile = parsed;
+                }
                 logger.Log(LogLevel.Debug, "Loaded opcodes from file");
                 return true;
             }
@@ -166,50 +297,128 @@ namespace RainbowMage.OverlayPlugin
 
         private void LogOnce(LogLevel level, string message)
         {
-            if (loggedMessages.Contains(message))
-                return;
-            loggedMessages.Add(message);
+            lock (opcodeLock)
+            {
+                if (loggedMessages.Contains(message))
+                    return;
+                loggedMessages.Add(message);
+            }
             logger.Log(level, message);
         }
 
         private void LogException(string message)
         {
-            if (exceptionCount >= maxExceptionsLogged)
-                return;
-            exceptionCount++;
+            lock (opcodeLock)
+            {
+                if (exceptionCount >= maxExceptionsLogged)
+                    return;
+                exceptionCount++;
+            }
             logger.Log(LogLevel.Error, message);
         }
 
-        private IOpcodeConfigEntry GetOpcode(string name, Opcodes opcodes, string version, string opcodeType, MachinaRegion machinaRegion)
+        private static IOpcodeConfigEntry FindOpcodeLocked(string name, Opcodes opcodes, string version, MachinaRegion machinaRegion)
         {
-            if (opcodes == null)
-                return null;
-
-            if (opcodes.TryGetValue(machinaRegion, out var regionOpcodes))
+            if (opcodes != null &&
+                opcodes.TryGetValue(machinaRegion, out var regionOpcodes) &&
+                regionOpcodes.TryGetValue(version, out var versionOpcodes) &&
+                versionOpcodes.TryGetValue(name, out var opcode))
             {
-                if (regionOpcodes.TryGetValue(version, out var versionOpcodes))
-                {
-                    if (versionOpcodes.TryGetValue(name, out var opcode))
-                    {
-                        return opcode;
-                    }
-                    else
-                    {
-                        LogException($"No {opcodeType} opcode for game region {machinaRegion}, version {version}, opcode name {name}");
-                    }
-                }
-                else
-                {
-                    LogException($"No {opcodeType} opcodes for game region {machinaRegion}, version {version}");
-                }
-            }
-            else
-            {
-                LogException($"No {opcodeType} opcodes for game region {machinaRegion}");
+                return opcode;
             }
 
             return null;
         }
+
+        private string FindLatestVersionLocked(MachinaRegion machinaRegion)
+        {
+            string latest = null;
+            foreach (var opcodes in new[] { opcodesFile, opcodesConfig })
+            {
+                if (opcodes == null || !opcodes.TryGetValue(machinaRegion, out var regionOpcodes))
+                    continue;
+
+                foreach (var version in regionOpcodes.Keys)
+                {
+                    if (latest == null || string.CompareOrdinal(version, latest) > 0)
+                        latest = version;
+                }
+            }
+
+            return latest;
+        }
+
+        /// <summary>
+        /// 解析 opcode，并返回该结果所属的缓存代次。代次变化前结果保持有效。
+        /// </summary>
+        public IOpcodeConfigEntry ResolveOpcode(string name, MachinaRegion machinaRegion, out int resolvedGeneration)
+        {
+            PollGameVersionIfDue();
+
+            IOpcodeConfigEntry opcode;
+            string version;
+            var versionDetected = true;
+            RemoteFetchState fetchState = null;
+            var logMissing = false;
+
+            lock (opcodeLock)
+            {
+                resolvedGeneration = generation;
+                version = gameVersion;
+
+                if (version == null)
+                {
+                    // 拿到真实版本号后轮询会递增代次，回退结果随之失效
+                    versionDetected = false;
+                    version = FindLatestVersionLocked(machinaRegion);
+                    opcode = version == null ? null :
+                        FindOpcodeLocked(name, opcodesConfig, version, machinaRegion) ??
+                        FindOpcodeLocked(name, opcodesFile, version, machinaRegion);
+                }
+                else
+                {
+                    opcode = FindOpcodeLocked(name, opcodesConfig, version, machinaRegion) ??
+                             FindOpcodeLocked(name, opcodesFile, version, machinaRegion);
+
+                    if (opcode == null && !remoteFetchInProgress)
+                    {
+                        var state = GetRemoteFetchStateLocked(machinaRegion, version);
+                        if (!state.RetryPending)
+                        {
+                            if (!state.Succeeded && state.FailureCount < MaxRemoteFetchAttempts)
+                            {
+                                remoteFetchInProgress = true;
+                                fetchState = state;
+                            }
+                            else
+                            {
+                                logMissing = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (fetchState != null)
+            {
+                _ = Task.Run(() => FetchRemoteOpcodes(fetchState));
+            }
+
+            if (!versionDetected)
+            {
+                LogOnce(LogLevel.Info, version == null
+                    ? $"Could not detect game version from FFXIV_ACT_Plugin, and no opcodes are available for region {machinaRegion}"
+                    : $"Could not detect game version from FFXIV_ACT_Plugin, defaulting to latest version {version} for region {machinaRegion}");
+            }
+
+            if (logMissing)
+            {
+                LogOnce(LogLevel.Error, $"No opcode for game region {machinaRegion}, version {version}, opcode name {name}");
+            }
+
+            return opcode;
+        }
+
         public IOpcodeConfigEntry this[string name]
         {
             get
@@ -223,54 +432,7 @@ namespace RainbowMage.OverlayPlugin
         {
             get
             {
-                var version = repository.GetGameVersion();
-                if (version == null || version == "")
-                {
-                    LogOnce(LogLevel.Info, $"Could not detect game version from FFXIV_ACT_Plugin, defaulting to latest version for region {machinaRegion}");
-
-                    var possibleVersions = new List<string>();
-                    if (opcodesFile != null && opcodesFile.ContainsKey(machinaRegion))
-                    {
-                        foreach (var key in opcodesFile[machinaRegion].Keys)
-                            possibleVersions.Add(key);
-                    }
-
-                    if (opcodesConfig != null && opcodesConfig.ContainsKey(machinaRegion))
-                    {
-                        foreach (var key in opcodesConfig[machinaRegion].Keys)
-                            possibleVersions.Add(key);
-                    }
-                    possibleVersions.Sort();
-
-                    if (possibleVersions.Count > 0)
-                    {
-                        version = possibleVersions[possibleVersions.Count - 1];
-                        LogOnce(LogLevel.Info, $"Detected most recent version for {machinaRegion} = {version}");
-                    }
-                    else
-                    {
-                        LogOnce(LogLevel.Info, $"Could not determine latest version for region {machinaRegion}");
-                        return null;
-                    }
-                }
-
-                var opcode = GetOpcode(name, opcodesConfig, version, "config", machinaRegion);
-                if (opcode == null)
-                {
-                    opcode = GetOpcode(name, opcodesFile, version, "file", machinaRegion);
-
-                    // Try once to get this remotely, but only if this opcode or version is missing.
-                    // TODO: we could consider getting this once always too, but for now
-                    // if we ever have an incorrect (but present) opcode, another release is required.
-                    if (opcode == null && !haveAttemptedOpcodeDownload)
-                    {
-                        haveAttemptedOpcodeDownload = true;
-                        SaveRemoteOpcodesToConfig();
-                        return GetOpcode(name, opcodesConfig, version, "config", machinaRegion);
-                    }
-                }
-
-                return opcode;
+                return ResolveOpcode(name, machinaRegion, out _);
             }
         }
     }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace RainbowMage.OverlayPlugin.NetworkProcessors.PacketHelper
 {
@@ -28,6 +29,14 @@ namespace RainbowMage.OverlayPlugin.NetworkProcessors.PacketHelper
             cn = new PacketHelper<HeaderStruct_CN, PacketStruct_CN>(cnOpcode);
             kr = new PacketHelper<HeaderStruct_KR, PacketStruct_KR>(krOpcode);
             tc = new PacketHelper<HeaderStruct_TC, PacketStruct_TC>(tcOpcode);
+        }
+
+        private RegionalizedPacketHelper(OverlayPluginLogLineConfig opcodeConfig, string opcodeName)
+        {
+            global = new PacketHelper<HeaderStruct_Global, PacketStruct_Global>(opcodeConfig, opcodeName, GameRegion.Global.ToString());
+            cn = new PacketHelper<HeaderStruct_CN, PacketStruct_CN>(opcodeConfig, opcodeName, GameRegion.Chinese.ToString());
+            kr = new PacketHelper<HeaderStruct_KR, PacketStruct_KR>(opcodeConfig, opcodeName, GameRegion.Korean.ToString());
+            tc = new PacketHelper<HeaderStruct_TC, PacketStruct_TC>(opcodeConfig, opcodeName, GameRegion.TraditionalChinese.ToString());
         }
 
         public IPacketHelper this[GameRegion gameRegion]
@@ -98,18 +107,8 @@ namespace RainbowMage.OverlayPlugin.NetworkProcessors.PacketHelper
         public static RegionalizedPacketHelper<HeaderStruct_Global, PacketStruct_Global, HeaderStruct_CN, PacketStruct_CN, HeaderStruct_KR, PacketStruct_KR, HeaderStruct_TC, PacketStruct_TC>
             CreateFromOpcodeConfig(OverlayPluginLogLineConfig opcodeConfig, string opcodeName)
         {
-            var globalOpcodeConfigEntry = opcodeConfig[opcodeName, GameRegion.Global.ToString()];
-            var cnOpcodeConfigEntry = opcodeConfig[opcodeName, GameRegion.Chinese.ToString()];
-            var krOpcodeConfigEntry = opcodeConfig[opcodeName, GameRegion.Korean.ToString()];
-            var tcOpcodeConfigEntry = opcodeConfig[opcodeName, GameRegion.TraditionalChinese.ToString()];
-
-            ushort globalOpcode = (ushort)(globalOpcodeConfigEntry?.opcode ?? 0);
-            ushort cnOpcode = (ushort)(cnOpcodeConfigEntry?.opcode ?? 0);
-            ushort krOpcode = (ushort)(krOpcodeConfigEntry?.opcode ?? 0);
-            ushort tcOpcode = (ushort)(tcOpcodeConfigEntry?.opcode ?? 0);
-
             return new RegionalizedPacketHelper<HeaderStruct_Global, PacketStruct_Global, HeaderStruct_CN, PacketStruct_CN, HeaderStruct_KR, PacketStruct_KR, HeaderStruct_TC, PacketStruct_TC>
-                (globalOpcode, cnOpcode, krOpcode, tcOpcode);
+                (opcodeConfig, opcodeName);
         }
     }
 
@@ -122,15 +121,63 @@ namespace RainbowMage.OverlayPlugin.NetworkProcessors.PacketHelper
         where HeaderStruct : struct, IHeaderStruct
         where PacketStruct : struct, IPacketStruct
     {
-        public readonly ushort Opcode;
+        private sealed class CachedOpcode
+        {
+            public readonly int Generation;
+            public readonly ushort Opcode;
+
+            public CachedOpcode(int generation, ushort opcode)
+            {
+                Generation = generation;
+                Opcode = opcode;
+            }
+        }
+
+        private readonly OverlayPluginLogLineConfig opcodeConfig;
+        private readonly string opcodeName;
+        private readonly string machinaRegion;
+        private readonly ushort fixedOpcode;
+        // 并发线程可能重复解析并互相覆盖，代次不匹配时会再次解析，结果仍然正确
+        private CachedOpcode cachedOpcode;
+
+        public ushort Opcode => GetOpcode();
         public readonly int headerSize;
         public readonly int packetSize;
 
         public PacketHelper(ushort opcode)
         {
-            Opcode = opcode;
+            fixedOpcode = opcode;
             headerSize = Marshal.SizeOf(typeof(HeaderStruct));
             packetSize = Marshal.SizeOf(typeof(PacketStruct));
+        }
+
+        public PacketHelper(OverlayPluginLogLineConfig opcodeConfig, string opcodeName, string machinaRegion)
+        {
+            this.opcodeConfig = opcodeConfig;
+            this.opcodeName = opcodeName;
+            this.machinaRegion = machinaRegion;
+            headerSize = Marshal.SizeOf(typeof(HeaderStruct));
+            packetSize = Marshal.SizeOf(typeof(PacketStruct));
+        }
+
+        public ushort GetOpcode()
+        {
+            if (opcodeConfig == null)
+            {
+                return fixedOpcode;
+            }
+
+            var generation = opcodeConfig.GetCacheGeneration();
+            var cached = Volatile.Read(ref cachedOpcode);
+            if (cached != null && cached.Generation == generation)
+            {
+                return cached.Opcode;
+            }
+
+            var entry = opcodeConfig.ResolveOpcode(opcodeName, machinaRegion, out var resolvedGeneration);
+            var opcode = (ushort)(entry?.opcode ?? 0);
+            Volatile.Write(ref cachedOpcode, new CachedOpcode(resolvedGeneration, opcode));
+            return opcode;
         }
 
         /// <summary>
@@ -171,12 +218,21 @@ namespace RainbowMage.OverlayPlugin.NetworkProcessors.PacketHelper
                 return false;
             }
 
+            var opcode = GetOpcode();
+            if (opcode == 0)
+            {
+                header = default;
+                packet = default;
+
+                return false;
+            }
+
             fixed (byte* messagePtr = message)
             {
                 var headerPtr = new IntPtr(messagePtr);
                 header = Marshal.PtrToStructure<HeaderStruct>(headerPtr);
 
-                if (header.Opcode != Opcode)
+                if (header.Opcode != opcode)
                 {
                     header = default;
                     packet = default;
